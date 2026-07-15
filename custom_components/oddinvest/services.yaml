@@ -1,0 +1,30 @@
+refresh:
+  name: Оновити дані
+  description: >-
+    Оновити довідник паперів НБУ і курс валют на боці сервіса oddinvestd,
+    зробити знімок і републікувати стан у MQTT.
+
+mark_payment:
+  name: Позначити виплату
+  description: Позначити виплату як отриману або перевкладену.
+  fields:
+    isin:
+      name: ISIN
+      description: Код паперу.
+      required: true
+      example: UA4000227748
+      selector:
+        text:
+    pay_date:
+      name: Дата виплати
+      required: true
+      selector:
+        date:
+    status:
+      name: Статус
+      required: true
+      selector:
+        select:
+          options:
+            - received
+            - reinvested

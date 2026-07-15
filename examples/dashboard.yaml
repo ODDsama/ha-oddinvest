@@ -1,0 +1,53 @@
+# Приклад секції Lovelace-дашборда для ODD Invest.
+# Підстав свої entity_id (Налаштування -> Пристрої -> ODD Invest).
+type: sections
+sections:
+  - type: grid
+    cards:
+      - type: heading
+        heading: Портфель
+      - type: entities
+        entities:
+          - entity: sensor.odd_invest_vkladeno
+          - entity: sensor.odd_invest_nominal_portfelia
+          - entity: sensor.odd_invest_chastka_usd
+          - entity: sensor.odd_invest_ne_perevkladeno
+      - type: gauge
+        entity: sensor.odd_invest_prohres_misiatsia
+        name: Ціль місяця
+        min: 0
+        max: 120
+        severity: { green: 100, yellow: 50, red: 0 }
+      - type: entities
+        title: Найближче
+        entities:
+          - entity: sensor.odd_invest_nastupna_vyplata
+          - entity: sensor.odd_invest_nadkhodzhennia_misiatsia
+          - entity: sensor.odd_invest_strakhovka_dniv_lyshylos
+          - entity: button.odd_invest_onovyty_dani
+      - type: calendar
+        entities:
+          - calendar.odd_invest_vyplaty
+        initial_view: listMonth
+
+# --- Графік «факт vs модель» (потрібна картка apexcharts-card з HACS) ---
+# Факт — історія сенсорів (recorder пише її автоматично).
+# Модель — статистична лінія цілі: month_target × місяців від старту.
+#  - type: custom:apexcharts-card
+#    header: { show: true, title: "Факт vs план" }
+#    graph_span: 365d
+#    series:
+#      - entity: sensor.odd_invest_vkladeno
+#        name: Вкладено (факт)
+#        group_by: { func: last, duration: 1d }
+#      - entity: sensor.odd_invest_nominal_portfelia
+#        name: Номінал
+#        group_by: { func: last, duration: 1d }
+#      - entity: sensor.odd_invest_vkladeno
+#        name: План
+#        group_by: { func: last, duration: 1d }
+#        transform: >-
+#          const start = new Date('2026-08-01');
+#          const target = hass.states['number.odd_invest_tsil_na_misiats'].state;
+#          const months = (new Date(x) - start) / 2628e6;
+#          return months > 0 ? months * target : 0;

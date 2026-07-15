@@ -1,0 +1,40 @@
+name: ci
+on:
+  push: { branches: [main] }
+  pull_request:
+  schedule:
+    - cron: "10 4 * * 1"  # щотижня: ловимо дрейф контракту і нових версій HA
+
+jobs:
+  contract:
+    name: contract-тести проти фікстур oddinvest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      # Рішення №5 концепції: фікстури живуть у репозиторії сервіса,
+      # CI інтеграції завжди тестується проти його main-гілки.
+      - name: Стягнути актуальний контракт
+        run: |
+          curl -fsSL -o tests/fixtures/basic.json \
+            https://raw.githubusercontent.com/ODDsama/oddinvest/main/contract/fixtures/basic.json
+          curl -fsSL -o tests/fixtures/empty.json \
+            https://raw.githubusercontent.com/ODDsama/oddinvest/main/contract/fixtures/empty.json
+          curl -fsSL -o tests/fixtures/oddinvest-state.schema.json \
+            https://raw.githubusercontent.com/ODDsama/oddinvest/main/contract/oddinvest-state.schema.json
+      - run: pip install pytest jsonschema
+      - run: pytest -q
+
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master
+
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hacs/action@main
+        with: { category: integration }

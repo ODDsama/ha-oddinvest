@@ -1,0 +1,42 @@
+blueprint:
+  name: "ODD Invest: нагадування перевкласти виплати"
+  description: >-
+    Сповіщення, коли на рахунку є гроші з виплат, які не
+    перевкладено довше заданого часу.
+  domain: automation
+  input:
+    uninvested_sensor:
+      name: Бінарний сенсор неперевкладених виплат
+      selector:
+        entity:
+          filter:
+            - integration: oddinvest
+              domain: binary_sensor
+    delay_hours:
+      name: Скільки годин чекати перед нагадуванням
+      default: 24
+      selector:
+        number: { min: 1, max: 168, unit_of_measurement: год }
+    notify_service:
+      name: Сервіс сповіщень
+      default: notify.notify
+      selector:
+        text:
+
+triggers:
+  - trigger: state
+    entity_id: !input uninvested_sensor
+    to: "on"
+    for:
+      hours: !input delay_hours
+
+actions:
+  - service: !input notify_service
+    data:
+      title: "ODD Invest: час перевкласти"
+      message: >-
+        З виплат на рахунку
+        {{ state_attr(trigger.entity_id, 'uninvested_uah') | round(0) }} грн —
+        вони не працюють. Купи щось у Дії.
+
+mode: single

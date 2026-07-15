@@ -1,0 +1,113 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "ODD Invest",
+        "description": "Address of the oddinvestd service and MQTT topic prefix (must match ODDINVEST_MQTT_PREFIX).",
+        "data": {
+          "base_url": "REST address (http://host:8080)",
+          "topic_prefix": "MQTT topic prefix"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to oddinvestd",
+      "bad_contract": "Service responded but the state document violates the contract (version mismatch?)"
+    },
+    "abort": {
+      "already_configured": "This prefix is already configured"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "invested_uah": {
+        "name": "Invested"
+      },
+      "nominal_uah_eq": {
+        "name": "Portfolio nominal"
+      },
+      "usd_share_pct": {
+        "name": "USD share"
+      },
+      "uninvested_uah": {
+        "name": "Uninvested"
+      },
+      "month_invested_uah": {
+        "name": "Monthly contributions"
+      },
+      "month_progress_pct": {
+        "name": "Month progress"
+      },
+      "month_incoming_uah": {
+        "name": "Month incoming"
+      },
+      "next_payment_date": {
+        "name": "Next payment"
+      },
+      "insurance_days_left": {
+        "name": "Insurance days left"
+      },
+      "xirr_uah": {
+        "name": "XIRR UAH"
+      },
+      "xirr_usd": {
+        "name": "XIRR USD"
+      }
+    },
+    "binary_sensor": {
+      "has_uninvested": {
+        "name": "Uninvested payouts present"
+      }
+    },
+    "calendar": {
+      "payments": {
+        "name": "Payments"
+      }
+    },
+    "button": {
+      "refresh": {
+        "name": "Refresh data"
+      }
+    },
+    "number": {
+      "monthly_target_uah": {
+        "name": "Monthly target"
+      },
+      "usd_target_share_pct": {
+        "name": "Target USD share"
+      },
+      "insurance_premium_uah": {
+        "name": "Insurance premium"
+      }
+    },
+    "date": {
+      "insurance_renewal": {
+        "name": "Insurance renewal"
+      }
+    }
+  },
+  "services": {
+    "refresh": {
+      "name": "Refresh data",
+      "description": "Refresh the NBU directory and FX rate on the service side, republish state."
+    },
+    "mark_payment": {
+      "name": "Mark payment",
+      "description": "Mark a payout as received or reinvested.",
+      "fields": {
+        "isin": {
+          "name": "ISIN",
+          "description": "Security code."
+        },
+        "pay_date": {
+          "name": "Payment date",
+          "description": "ISO date of the payout."
+        },
+        "status": {
+          "name": "Status",
+          "description": "received or reinvested."
+        }
+      }
+    }
+  }
+}

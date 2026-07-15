@@ -1,0 +1,33 @@
+blueprint:
+  name: "ODD Invest: завтра виплата"
+  description: Сповіщення ввечері напередодні купона чи погашення.
+  domain: automation
+  input:
+    payments_calendar:
+      name: Календар виплат
+      selector:
+        entity:
+          filter:
+            - integration: oddinvest
+              domain: calendar
+    notify_service:
+      name: Сервіс сповіщень
+      default: notify.notify
+      selector:
+        text:
+
+triggers:
+  - trigger: calendar
+    entity_id: !input payments_calendar
+    event: start
+    offset: "-06:00:00"   # all-day подія стартує опівночі; -6 год = 18:00 напередодні
+
+actions:
+  - service: !input notify_service
+    data:
+      title: "ODD Invest: завтра виплата"
+      message: >-
+        {{ trigger.calendar_event.summary }}
+        ({{ trigger.calendar_event.description }}).
+
+mode: queued

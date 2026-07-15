@@ -1,0 +1,113 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "ODD Invest",
+        "description": "Адреса сервіса oddinvestd і префікс MQTT-топіків (має збігатися з ODDINVEST_MQTT_PREFIX).",
+        "data": {
+          "base_url": "Адреса REST (http://host:8080)",
+          "topic_prefix": "Префікс MQTT-топіків"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Не вдалося під'єднатися до oddinvestd",
+      "bad_contract": "Сервіс відповів, але документ стану не відповідає контракту (несумісні версії?)"
+    },
+    "abort": {
+      "already_configured": "Цей префікс уже налаштовано"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "invested_uah": {
+        "name": "Вкладено"
+      },
+      "nominal_uah_eq": {
+        "name": "Номінал портфеля"
+      },
+      "usd_share_pct": {
+        "name": "Частка USD"
+      },
+      "uninvested_uah": {
+        "name": "Не перевкладено"
+      },
+      "month_invested_uah": {
+        "name": "Внески за місяць"
+      },
+      "month_progress_pct": {
+        "name": "Прогрес місяця"
+      },
+      "month_incoming_uah": {
+        "name": "Надходження місяця"
+      },
+      "next_payment_date": {
+        "name": "Наступна виплата"
+      },
+      "insurance_days_left": {
+        "name": "Страховка, днів лишилось"
+      },
+      "xirr_uah": {
+        "name": "XIRR гривня"
+      },
+      "xirr_usd": {
+        "name": "XIRR долар"
+      }
+    },
+    "binary_sensor": {
+      "has_uninvested": {
+        "name": "Є неперевкладені виплати"
+      }
+    },
+    "calendar": {
+      "payments": {
+        "name": "Виплати"
+      }
+    },
+    "button": {
+      "refresh": {
+        "name": "Оновити дані"
+      }
+    },
+    "number": {
+      "monthly_target_uah": {
+        "name": "Ціль на місяць"
+      },
+      "usd_target_share_pct": {
+        "name": "Цільова частка USD"
+      },
+      "insurance_premium_uah": {
+        "name": "Премія страховки"
+      }
+    },
+    "date": {
+      "insurance_renewal": {
+        "name": "Продовження страховки"
+      }
+    }
+  },
+  "services": {
+    "refresh": {
+      "name": "Оновити дані",
+      "description": "Оновити довідник НБУ і курс на боці сервіса, републікувати стан."
+    },
+    "mark_payment": {
+      "name": "Позначити виплату",
+      "description": "Позначити виплату як отриману або перевкладену.",
+      "fields": {
+        "isin": {
+          "name": "ISIN",
+          "description": "Код паперу."
+        },
+        "pay_date": {
+          "name": "Дата виплати",
+          "description": "Дата виплати (ISO)."
+        },
+        "status": {
+          "name": "Статус",
+          "description": "received або reinvested."
+        }
+      }
+    }
+  }
+}
