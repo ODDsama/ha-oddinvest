@@ -27,7 +27,7 @@ from .panel import async_setup_panel
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = ["sensor", "binary_sensor", "calendar", "button", "number", "date"]
+PLATFORMS = ["sensor", "binary_sensor", "calendar", "button", "number"]
 
 type OddInvestConfigEntry = ConfigEntry[OddInvestData]
 

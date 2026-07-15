@@ -55,18 +55,6 @@ NUMBERS: tuple[OddInvestNumberDescription, ...] = (
         native_step=5,
         value_fn=lambda s: s.usd_target_share_pct,
     ),
-    OddInvestNumberDescription(
-        key="insurance_premium_uah",
-        translation_key="insurance_premium_uah",
-        setting_key="insurance_premium_uah",
-        native_unit_of_measurement="UAH",
-        device_class=NumberDeviceClass.MONETARY,
-        mode=NumberMode.BOX,
-        native_min_value=0,
-        native_max_value=1_000_000,
-        native_step=100,
-        value_fn=lambda s: s.insurance_premium_uah,
-    ),
 )
 
 

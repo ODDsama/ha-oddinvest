@@ -149,13 +149,6 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         suggested_display_precision=2,
         value_fn=lambda d: d.xirr.get("USD"),
     ),
-    OddInvestSensorDescription(
-        key="insurance_days_left",
-        translation_key="insurance_days_left",
-        native_unit_of_measurement="d",
-        state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda d: d.insurance_days_left,
-    ),
 )
 
 
