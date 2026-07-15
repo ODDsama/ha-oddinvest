@@ -4,6 +4,7 @@
   "invested_uah": 137305.57,
   "nominal_uah_eq": 138246.8,
   "usd_share_pct": 63.8327975765081,
+  "eur_share_pct": 0,
   "uninvested_uah": 0,
   "month_invested_uah": 4500,
   "month_target_uah": 5000,
@@ -16,12 +17,12 @@
     "amount": 4137.5,
     "currency": "UAH"
   },
-  "insurance_days_left": 45,
   "ladder": [
     {
       "year": 2027,
       "uah": 50000,
-      "usd": 2000
+      "usd": 2000,
+      "eur": 0
     }
   ],
   "top_payments": [
@@ -76,8 +77,6 @@
   },
   "settings": {
     "monthly_target_uah": 5000,
-    "usd_target_share_pct": 50,
-    "insurance_renewal": "2026-08-29",
-    "insurance_premium_uah": 8000
+    "usd_target_share_pct": 50
   }
 }

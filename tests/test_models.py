@@ -46,7 +46,7 @@ def test_parse_basic_fixture():
     assert doc.nominal_uah_eq == 138246.8
     assert doc.month_progress_pct == 90
     assert doc.uninvested_uah == 0
-    assert doc.insurance_days_left == 45
+    assert doc.eur_share_pct == 0
 
     assert doc.next_payment is not None
     assert doc.next_payment.date == "2026-07-20"
@@ -58,6 +58,7 @@ def test_parse_basic_fixture():
     assert doc.ladder[0].year == 2027
     assert doc.ladder[0].uah == 50000
     assert doc.ladder[0].usd == 2000
+    assert doc.ladder[0].eur == 0
 
     assert len(doc.top_payments) == 3
     assert doc.top_payments[-1].type == "redemption"
@@ -72,8 +73,6 @@ def test_settings_parsed():
     assert doc.settings is not None
     assert doc.settings.monthly_target_uah == 5000
     assert doc.settings.usd_target_share_pct == 50
-    assert doc.settings.insurance_renewal == "2026-08-29"
-    assert doc.settings.insurance_premium_uah == 8000
 
 
 def test_xirr_parsed():
@@ -111,7 +110,6 @@ def test_settings_partial():
     raw["settings"] = {"monthly_target_uah": 4000}
     doc = StateDoc.from_payload(json.dumps(raw))
     assert doc.settings.monthly_target_uah == 4000
-    assert doc.settings.insurance_renewal is None
 
 
 def test_calendar_absent_on_old_service():
@@ -152,10 +150,8 @@ def test_garbage_rejected():
         StateDoc.from_payload("[1,2,3]")
 
 
-def test_null_next_payment_and_insurance():
+def test_null_next_payment():
     raw = json.loads(load("basic.json"))
     raw["next_payment"] = None
-    del raw["insurance_days_left"]
     doc = StateDoc.from_payload(json.dumps(raw))
     assert doc.next_payment is None
-    assert doc.insurance_days_left is None
