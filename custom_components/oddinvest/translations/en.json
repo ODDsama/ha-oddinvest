@@ -29,6 +29,9 @@
       "usd_share_pct": {
         "name": "USD share"
       },
+      "eur_share_pct": {
+        "name": "EUR share"
+      },
       "uninvested_uah": {
         "name": "Uninvested"
       },
@@ -49,6 +52,9 @@
       },
       "xirr_usd": {
         "name": "XIRR USD"
+      },
+      "xirr_eur": {
+        "name": "XIRR EUR"
       }
     },
     "binary_sensor": {

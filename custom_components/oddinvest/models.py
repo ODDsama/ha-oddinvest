@@ -37,6 +37,7 @@ class LadderRow:
     year: int
     uah: float
     usd: float
+    eur: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -53,8 +54,6 @@ class Settings:
     monthly_target_uah: float | None = None
     usd_target_share_pct: float | None = None
     eur_target_share_pct: float | None = None
-    insurance_renewal: str | None = None
-    insurance_premium_uah: float | None = None
 
 
 @dataclass(frozen=True)
@@ -70,7 +69,7 @@ class StateDoc:
     month_progress_pct: int
     month_incoming_uah: float
     next_payment: NextPayment | None = None
-    insurance_days_left: int | None = None
+    eur_share_pct: float = 0.0
     ladder: tuple[LadderRow, ...] = field(default_factory=tuple)
     top_payments: tuple[PaymentRow, ...] = field(default_factory=tuple)
     # v0.2+ сервіса; за старого сервіса 0.1 — порожній
@@ -126,8 +125,6 @@ class StateDoc:
                 currency=str(p["currency"]),
             )
 
-        ins = raw.get("insurance_days_left")
-
         return cls(
             schema=int(schema),
             generated_at=str(raw["generated_at"]),
@@ -140,9 +137,14 @@ class StateDoc:
             month_progress_pct=int(raw["month_progress_pct"]),
             month_incoming_uah=float(raw["month_incoming_uah"]),
             next_payment=np,
-            insurance_days_left=int(ins) if ins is not None else None,
+            eur_share_pct=float(raw.get("eur_share_pct", 0.0)),
             ladder=tuple(
-                LadderRow(year=int(r["year"]), uah=float(r["uah"]), usd=float(r["usd"]))
+                LadderRow(
+                    year=int(r["year"]),
+                    uah=float(r["uah"]),
+                    usd=float(r["usd"]),
+                    eur=float(r.get("eur", 0.0)),
+                )
                 for r in raw["ladder"]
             ),
             top_payments=tuple(
@@ -164,13 +166,10 @@ def _settings(raw: dict[str, Any] | None) -> Settings | None:
         v = raw.get(key)
         return float(v) if v is not None else None
 
-    ins = raw.get("insurance_renewal")
     return Settings(
         monthly_target_uah=num("monthly_target_uah"),
         usd_target_share_pct=num("usd_target_share_pct"),
         eur_target_share_pct=num("eur_target_share_pct"),
-        insurance_renewal=str(ins) if ins else None,
-        insurance_premium_uah=num("insurance_premium_uah"),
     )
 
 

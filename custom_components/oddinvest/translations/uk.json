@@ -29,6 +29,9 @@
       "usd_share_pct": {
         "name": "Частка USD"
       },
+      "eur_share_pct": {
+        "name": "Частка EUR"
+      },
       "uninvested_uah": {
         "name": "Не перевкладено"
       },
@@ -49,6 +52,9 @@
       },
       "xirr_usd": {
         "name": "XIRR долар"
+      },
+      "xirr_eur": {
+        "name": "XIRR євро"
       }
     },
     "binary_sensor": {

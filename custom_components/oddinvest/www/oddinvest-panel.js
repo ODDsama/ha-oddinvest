@@ -354,20 +354,21 @@ class OddInvestPanel extends HTMLElement {
   // ---------- ДРАБИНА ----------
   async _renderLadder(main) {
     const lad = (this._summary && this._summary.ladder) || [];
-    const maxV = Math.max(1, ...lad.map((r) => Math.max(r.uah || 0, r.usd || 0)));
+    const maxV = Math.max(1, ...lad.map((r) => Math.max(r.uah || 0, r.usd || 0, r.eur || 0)));
     const bar = (v, color) => v > 0
-      ? `<span class="bar" style="width:${Math.max(4, (v / maxV) * 160)}px;background:${color}"></span>` : "";
+      ? `<span class="bar" style="width:${Math.max(4, (v / maxV) * 120)}px;background:${color}"></span>` : "";
+    const fx = (v, sym) => v ? Number(v).toLocaleString("uk-UA", { minimumFractionDigits: 2 }) + " " + sym : "—";
     main.innerHTML = `
       <div class="card">
         <h2>Драбина погашень</h2>
-        <div class="muted" style="margin-bottom:10px">Скільки номіналу повертається за роками (окремо UAH / USD).</div>
+        <div class="muted" style="margin-bottom:10px">Скільки номіналу повертається за роками (окремо UAH / USD / EUR).</div>
         ${lad.length ? `<table><thead><tr>
-          <th>Рік</th><th class="num">UAH</th><th></th><th class="num">USD</th><th></th></tr></thead><tbody>
+          <th>Рік</th><th class="num">UAH</th><th></th><th class="num">USD</th><th></th><th class="num">EUR</th><th></th></tr></thead><tbody>
           ${lad.map((r) => `<tr>
             <td>${r.year}</td>
             <td class="num">${r.uah ? fmtUAH(r.uah) : "—"}</td><td>${bar(r.uah, "var(--primary-color)")}</td>
-            <td class="num">${r.usd ? Number(r.usd).toLocaleString("uk-UA", { minimumFractionDigits: 2 }) + " $" : "—"}</td>
-            <td>${bar(r.usd, "var(--info-color,#039be5)")}</td></tr>`).join("")}</tbody></table>`
+            <td class="num">${fx(r.usd, "$")}</td><td>${bar(r.usd, "var(--info-color,#039be5)")}</td>
+            <td class="num">${fx(r.eur, "€")}</td><td>${bar(r.eur, "var(--warning-color,#ffa600)")}</td></tr>`).join("")}</tbody></table>`
           : `<div class="muted">Драбина порожня — додайте папери в портфель.</div>`}
       </div>`;
   }

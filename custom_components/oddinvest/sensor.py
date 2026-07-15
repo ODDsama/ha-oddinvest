@@ -58,7 +58,8 @@ def _next_payment_attrs(doc: StateDoc) -> dict[str, Any] | None:
 def _ladder_attrs(doc: StateDoc) -> dict[str, Any]:
     return {
         "ladder": [
-            {"year": r.year, "uah": r.uah, "usd": r.usd} for r in doc.ladder
+            {"year": r.year, "uah": r.uah, "usd": r.usd, "eur": r.eur}
+            for r in doc.ladder
         ]
     }
 
@@ -90,6 +91,14 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=1,
         value_fn=lambda d: d.usd_share_pct,
+    ),
+    OddInvestSensorDescription(
+        key="eur_share_pct",
+        translation_key="eur_share_pct",
+        native_unit_of_measurement="%",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        value_fn=lambda d: d.eur_share_pct,
     ),
     OddInvestSensorDescription(
         key="uninvested_uah",
@@ -148,6 +157,14 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         value_fn=lambda d: d.xirr.get("USD"),
+    ),
+    OddInvestSensorDescription(
+        key="xirr_eur",
+        translation_key="xirr_eur",
+        native_unit_of_measurement="%",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
+        value_fn=lambda d: d.xirr.get("EUR"),
     ),
 )
 
