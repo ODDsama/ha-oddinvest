@@ -44,9 +44,6 @@
       "next_payment_date": {
         "name": "Наступна виплата"
       },
-      "insurance_days_left": {
-        "name": "Страховка, днів лишилось"
-      },
       "xirr_uah": {
         "name": "XIRR гривня"
       },
@@ -76,13 +73,8 @@
       "usd_target_share_pct": {
         "name": "Цільова частка USD"
       },
-      "insurance_premium_uah": {
-        "name": "Премія страховки"
-      }
-    },
-    "date": {
-      "insurance_renewal": {
-        "name": "Продовження страховки"
+      "eur_target_share_pct": {
+        "name": "Цільова частка EUR"
       }
     }
   },

@@ -52,6 +52,7 @@ class PaymentRow:
 class Settings:
     monthly_target_uah: float | None = None
     usd_target_share_pct: float | None = None
+    eur_target_share_pct: float | None = None
     insurance_renewal: str | None = None
     insurance_premium_uah: float | None = None
 
@@ -167,6 +168,7 @@ def _settings(raw: dict[str, Any] | None) -> Settings | None:
     return Settings(
         monthly_target_uah=num("monthly_target_uah"),
         usd_target_share_pct=num("usd_target_share_pct"),
+        eur_target_share_pct=num("eur_target_share_pct"),
         insurance_renewal=str(ins) if ins else None,
         insurance_premium_uah=num("insurance_premium_uah"),
     )

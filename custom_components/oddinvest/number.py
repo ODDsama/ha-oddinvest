@@ -55,6 +55,17 @@ NUMBERS: tuple[OddInvestNumberDescription, ...] = (
         native_step=5,
         value_fn=lambda s: s.usd_target_share_pct,
     ),
+    OddInvestNumberDescription(
+        key="eur_target_share_pct",
+        translation_key="eur_target_share_pct",
+        setting_key="eur_target_share_pct",
+        native_unit_of_measurement="%",
+        mode=NumberMode.SLIDER,
+        native_min_value=0,
+        native_max_value=100,
+        native_step=5,
+        value_fn=lambda s: s.eur_target_share_pct,
+    ),
 )
 
 

@@ -44,9 +44,6 @@
       "next_payment_date": {
         "name": "Next payment"
       },
-      "insurance_days_left": {
-        "name": "Insurance days left"
-      },
       "xirr_uah": {
         "name": "XIRR UAH"
       },
@@ -76,13 +73,8 @@
       "usd_target_share_pct": {
         "name": "Target USD share"
       },
-      "insurance_premium_uah": {
-        "name": "Insurance premium"
-      }
-    },
-    "date": {
-      "insurance_renewal": {
-        "name": "Insurance renewal"
+      "eur_target_share_pct": {
+        "name": "Target EUR share"
       }
     }
   },

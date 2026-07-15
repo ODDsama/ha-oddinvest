@@ -454,6 +454,7 @@ class OddInvestPanel extends HTMLElement {
         <form id="setForm">
           <label>Ціль на місяць, ₴<input name="monthly_target_uah" inputmode="decimal" value="${esc(s.monthly_target_uah || "")}"></label>
           <label>Цільова частка USD, %<input name="usd_target_share_pct" inputmode="decimal" value="${esc(s.usd_target_share_pct || "")}"></label>
+          <label>Цільова частка EUR, %<input name="eur_target_share_pct" inputmode="decimal" value="${esc(s.eur_target_share_pct || "")}"></label>
           <button type="submit">Зберегти</button>
         </form>
       </div>`;
@@ -464,6 +465,7 @@ class OddInvestPanel extends HTMLElement {
         await this._api("PUT", "settings", {
           monthly_target_uah: f.monthly_target_uah.value.trim(),
           usd_target_share_pct: f.usd_target_share_pct.value.trim(),
+          eur_target_share_pct: f.eur_target_share_pct.value.trim(),
         });
         this._toast("Налаштування збережено"); this._loadTab();
       } catch (err) { this._toast(String(err.message || err), false); }
