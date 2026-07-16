@@ -72,6 +72,8 @@ class StateDoc:
     eur_share_pct: float = 0.0
     account_uah: float = 0.0
     reinvest_min_uah: float = 0.0
+    accounts: dict[str, float] = field(default_factory=dict)
+    reinvest_min: dict[str, float] = field(default_factory=dict)
     ladder: tuple[LadderRow, ...] = field(default_factory=tuple)
     top_payments: tuple[PaymentRow, ...] = field(default_factory=tuple)
     # v0.2+ сервіса; за старого сервіса 0.1 — порожній
@@ -142,6 +144,8 @@ class StateDoc:
             eur_share_pct=float(raw.get("eur_share_pct", 0.0)),
             account_uah=float(raw.get("account_uah", 0.0)),
             reinvest_min_uah=float(raw.get("reinvest_min_uah", 0.0)),
+            accounts={str(k): float(v) for k, v in (raw.get("accounts") or {}).items()},
+            reinvest_min={str(k): float(v) for k, v in (raw.get("reinvest_min") or {}).items()},
             ladder=tuple(
                 LadderRow(
                     year=int(r["year"]),

@@ -16,6 +16,8 @@ const TABS = [
 
 const fmtUAH = (v) =>
   (Number(v) || 0).toLocaleString("uk-UA", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " ₴";
+const fmtCur = (v, cur) =>
+  (Number(v) || 0).toLocaleString("uk-UA", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + cur;
 const fmtMoney = (m) =>
   m ? `${Number(m.amount).toLocaleString("uk-UA", { minimumFractionDigits: 2 })} ${m.currency}` : "—";
 const today = () => new Date().toISOString().slice(0, 10);
@@ -193,19 +195,22 @@ class OddInvestPanel extends HTMLElement {
     html += tile("XIRR €", x.EUR != null ? x.EUR.toFixed(2) + "%" : "—");
     this.shadowRoot.getElementById("summary").innerHTML = html;
 
-    // заклик до реінвестиції: на рахунку вистачає щонайменше на один папір
+    // заклик до реінвестиції — по кожній валюті, де вистачає на папір
     const cta = this.shadowRoot.getElementById("cta");
-    if (s.reinvest_min_uah > 0 && s.account_uah >= s.reinvest_min_uah) {
-      const n = Math.floor(s.account_uah / s.reinvest_min_uah);
-      cta.innerHTML = `<div class="cta">💰 На рахунку <b>${fmtUAH(s.account_uah)}</b> —
-        вистачає приблизно на <b>${n}</b> папер(и) (від ${fmtUAH(s.reinvest_min_uah)}).
-        <button id="ctaBtn">Реінвестувати →</button></div>`;
-      cta.querySelector("#ctaBtn").addEventListener("click", async () => {
-        this._tab = "portfolio";
-        await this._loadTab();
-        const f = this.shadowRoot.querySelector("#lotForm");
-        if (f) { f.scrollIntoView({ behavior: "smooth", block: "center" }); f.isin.focus(); }
-      });
+    const acc = s.accounts || {}, rmin = s.reinvest_min || {};
+    const ready = Object.keys(rmin).filter((c) => rmin[c] > 0 && (acc[c] || 0) >= rmin[c]);
+    if (ready.length) {
+      cta.innerHTML = ready.map((c) => {
+        const n = Math.floor(acc[c] / rmin[c]);
+        return `<div class="cta">💰 На рахунку <b>${fmtCur(acc[c], c)}</b> — вистачає на <b>${n}</b> ${esc(c)}-папер(и) (від ${fmtCur(rmin[c], c)}). <button data-cta="1">Реінвестувати →</button></div>`;
+      }).join("");
+      cta.querySelectorAll("[data-cta]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          this._tab = "portfolio";
+          await this._loadTab();
+          const f = this.shadowRoot.querySelector("#lotForm");
+          if (f) { f.scrollIntoView({ behavior: "smooth", block: "center" }); f.isin.focus(); }
+        }));
     } else {
       cta.innerHTML = "";
     }
@@ -346,40 +351,94 @@ class OddInvestPanel extends HTMLElement {
 
   // ---------- РАХУНОК ----------
   async _renderAccount(main) {
-    const deposits = await this._api("GET", "deposits").catch(() => []);
+    const [deposits, conversions] = await Promise.all([
+      this._api("GET", "deposits").catch(() => []),
+      this._api("GET", "conversions").catch(() => []),
+    ]);
     const s = this._summary || {};
+    const a = s.accounts || {};
+    const curOpts = (sel) => ["UAH", "USD", "EUR"].map((c) => `<option${c === sel ? " selected" : ""}>${c}</option>`).join("");
     main.innerHTML = `
       <div class="card">
         <h2>Рахунок (гаманець)</h2>
-        <div class="tiles" style="margin:0 0 12px">
-          <div class="tile"><div class="lbl">Баланс</div><div class="val">${fmtUAH(s.account_uah)}</div></div>
-          <div class="tile"><div class="lbl">Разом (капітал)</div><div class="val">${fmtUAH((s.nominal_uah_eq || 0) + (s.account_uah || 0))}</div></div>
+        <div class="tiles" style="margin:0 0 4px">
+          <div class="tile"><div class="lbl">UAH</div><div class="val">${fmtUAH(a.UAH || 0)}</div></div>
+          <div class="tile"><div class="lbl">USD</div><div class="val">${fmtCur(a.USD || 0, "$")}</div></div>
+          <div class="tile"><div class="lbl">EUR</div><div class="val">${fmtCur(a.EUR || 0, "€")}</div></div>
+          <div class="tile"><div class="lbl">Разом (грн-екв.)</div><div class="val">${fmtUAH(s.account_uah || 0)}</div></div>
         </div>
-        <div class="muted" style="margin-bottom:12px">Баланс = поповнення + отримані купони/погашення − вартість куплених лотів (грн-екв.). Купівля лота списує з рахунку автоматично.</div>
+      </div>
+
+      <div class="card">
+        <h2>Рух коштів</h2>
+        <div class="muted" style="margin-bottom:10px">Поповнення (+) / зняття (−) у своїй валюті. Купівля лота й купони рухають рахунок автоматично.</div>
         <form id="depForm">
-          <label>Сума (+ поповнення / − зняття)<input name="amount" inputmode="decimal" placeholder="5000.00" required></label>
+          <label>Сума (+ / −)<input name="amount" inputmode="decimal" placeholder="5000.00" required></label>
+          <label>Валюта<select name="currency">${curOpts("UAH")}</select></label>
           <label>Дата<input name="date" type="date" value="${today()}"></label>
-          <label>Нотатка<input name="note" placeholder="внесок за місяць"></label>
+          <label>Нотатка<input name="note"></label>
           <button type="submit">Записати</button>
         </form>
-        ${deposits.length ? `<table style="margin-top:12px"><thead><tr>
+        ${deposits.length ? `<table style="margin-top:10px"><thead><tr>
           <th>Дата</th><th class="num">Сума</th><th>Нотатка</th><th></th></tr></thead><tbody>
           ${deposits.map((d) => `<tr><td>${esc(d.date)}</td><td class="num">${fmtMoney(d.amount)}</td>
             <td>${esc(d.note || "")}</td>
             <td class="row-actions"><button class="sm warn" data-deldep="${d.id}">✕</button></td></tr>`).join("")}
-          </tbody></table>` : `<div class="muted" style="margin-top:12px">Рухів по рахунку ще немає.</div>`}
+          </tbody></table>` : ""}
+      </div>
+
+      <div class="card">
+        <h2>Конвертація валют</h2>
+        <div class="muted" style="margin-bottom:10px">Віддав → отримав (курс рахується сам із сум — те, що реально сталося на Monobank).</div>
+        <form id="convForm">
+          <label>Віддав<input name="from_amount" inputmode="decimal" placeholder="40000.00" required></label>
+          <label>Валюта<select name="from_currency">${curOpts("UAH")}</select></label>
+          <label>Отримав<input name="to_amount" inputmode="decimal" placeholder="1000.00" required></label>
+          <label>Валюта<select name="to_currency">${curOpts("USD")}</select></label>
+          <label>Дата<input name="date" type="date" value="${today()}"></label>
+          <label>Нотатка<input name="note"></label>
+          <button type="submit">Записати</button>
+        </form>
+        ${conversions.length ? `<table style="margin-top:10px"><thead><tr>
+          <th>Дата</th><th>Віддав</th><th>Отримав</th><th class="num">Курс</th><th></th></tr></thead><tbody>
+          ${conversions.map((c) => {
+            const rate = Number(c.from.amount) / Number(c.to.amount);
+            return `<tr><td>${esc(c.date)}</td><td>${fmtMoney(c.from)}</td><td>${fmtMoney(c.to)}</td>
+              <td class="num">${isFinite(rate) ? rate.toFixed(4) : "—"}</td>
+              <td class="row-actions"><button class="sm warn" data-delconv="${c.id}">✕</button></td></tr>`;
+          }).join("")}</tbody></table>` : ""}
       </div>`;
+
     main.querySelector("#depForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const f = e.target;
       try {
-        await this._api("POST", "deposits", { amount: f.amount.value.trim(), date: f.date.value, note: f.note.value.trim() });
-        this._toast("Рух по рахунку записано"); this._loadTab();
+        await this._api("POST", "deposits", {
+          amount: f.amount.value.trim(), currency: f.currency.value, date: f.date.value, note: f.note.value.trim(),
+        });
+        this._toast("Рух записано"); this._loadTab();
+      } catch (err) { this._toast(String(err.message || err), false); }
+    });
+    main.querySelector("#convForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const f = e.target;
+      try {
+        await this._api("POST", "conversions", {
+          from_amount: f.from_amount.value.trim(), from_currency: f.from_currency.value,
+          to_amount: f.to_amount.value.trim(), to_currency: f.to_currency.value,
+          date: f.date.value, note: f.note.value.trim(),
+        });
+        this._toast("Конвертацію записано"); this._loadTab();
       } catch (err) { this._toast(String(err.message || err), false); }
     });
     main.querySelectorAll("[data-deldep]").forEach((b) =>
       b.addEventListener("click", async () => {
         try { await this._api("DELETE", "deposits/" + b.dataset.deldep); this._toast("Рух видалено"); this._loadTab(); }
+        catch (err) { this._toast(String(err.message || err), false); }
+      }));
+    main.querySelectorAll("[data-delconv]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        try { await this._api("DELETE", "conversions/" + b.dataset.delconv); this._toast("Конвертацію видалено"); this._loadTab(); }
         catch (err) { this._toast(String(err.message || err), false); }
       }));
   }
