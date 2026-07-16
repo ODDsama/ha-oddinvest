@@ -13,6 +13,7 @@ from homeassistant.config_entries import (
     OptionsFlow,
 )
 from homeassistant.core import callback
+from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import CONF_BASE_URL, CONF_TOPIC_PREFIX, DEFAULT_PREFIX, DOMAIN
@@ -79,15 +80,28 @@ class OddInvestOptionsFlow(OptionsFlow):
             return self.async_create_entry(title="", data=user_input)
 
         o = self.config_entry.options
+        notify_services = sorted(self.hass.services.async_services().get("notify", {}))
         schema = vol.Schema(
             {
-                vol.Optional("notify_service", default=o.get("notify_service", "")): str,
+                vol.Optional(
+                    "notify_service", default=o.get("notify_service", "")
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=notify_services,
+                        custom_value=True,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
                 vol.Optional("notify_coupon", default=o.get("notify_coupon", True)): bool,
                 vol.Optional("notify_reinvest", default=o.get("notify_reinvest", True)): bool,
                 vol.Optional("notify_tomorrow", default=o.get("notify_tomorrow", True)): bool,
                 vol.Optional("notify_goal", default=o.get("notify_goal", True)): bool,
-                vol.Optional("goal_threshold", default=o.get("goal_threshold", 80)): vol.All(
-                    vol.Coerce(int), vol.Range(min=0, max=100)
+                vol.Optional(
+                    "goal_threshold", default=o.get("goal_threshold", 80)
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=0, max=100, step=5, mode=selector.NumberSelectorMode.SLIDER
+                    )
                 ),
             }
         )
