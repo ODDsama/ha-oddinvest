@@ -38,6 +38,9 @@
       "account_uah": {
         "name": "Рахунок"
       },
+      "total_capital_uah": {
+        "name": "Загальний капітал"
+      },
       "month_invested_uah": {
         "name": "Внески за місяць"
       },

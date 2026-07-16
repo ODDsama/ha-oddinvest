@@ -7,6 +7,7 @@ const PAY_TYPES = { 1: "купон", 2: "погашення", 3: "дострок
 const PAY_CLASS = { 1: "coupon", 2: "redemption", 3: "early" };
 const TABS = [
   ["portfolio", "Портфель"],
+  ["account", "Рахунок"],
   ["calendar", "Календар"],
   ["ladder", "Драбина"],
   ["dynamics", "Динаміка"],
@@ -155,6 +156,7 @@ class OddInvestPanel extends HTMLElement {
     try {
       await this._loadSummary();
       if (this._tab === "portfolio") await this._renderPortfolio(main);
+      else if (this._tab === "account") await this._renderAccount(main);
       else if (this._tab === "calendar") await this._renderCalendar(main);
       else if (this._tab === "ladder") await this._renderLadder(main);
       else if (this._tab === "dynamics") await this._renderDynamics(main);
@@ -181,7 +183,8 @@ class OddInvestPanel extends HTMLElement {
         `${fmtUAH(s.month_invested_uah)} / ${fmtUAH(s.month_target_uah)} (${s.month_progress_pct || 0}%)`,
         `<div class="progress"><span style="width:${Math.min(100, s.month_progress_pct || 0)}%"></span></div>`) +
       tile("Не перевкладено", fmtUAH(s.uninvested_uah)) +
-      tile("Рахунок", fmtUAH(s.account_uah));
+      tile("Рахунок", fmtUAH(s.account_uah)) +
+      tile("Разом (капітал)", fmtUAH((s.nominal_uah_eq || 0) + (s.account_uah || 0)));
     html += tile("Наступна виплата", s.next_payment
       ? `${esc(s.next_payment.date)} · ${Number(s.next_payment.amount).toLocaleString("uk-UA")} ${esc(s.next_payment.currency)}`
       : "—");
@@ -210,31 +213,12 @@ class OddInvestPanel extends HTMLElement {
 
   // ---------- ПОРТФЕЛЬ ----------
   async _renderPortfolio(main) {
-    const [positions, lots, sales, deposits] = await Promise.all([
+    const [positions, lots, sales] = await Promise.all([
       this._api("GET", "positions"),
       this._api("GET", "lots"),
       this._api("GET", "sales"),
-      this._api("GET", "deposits").catch(() => []),
     ]);
     main.innerHTML = `
-      <div class="card">
-        <h2>Рахунок (гаманець)</h2>
-        <div class="tiles" style="margin:0 0 12px">
-          <div class="tile"><div class="lbl">Баланс</div><div class="val">${fmtUAH(this._summary.account_uah)}</div></div>
-        </div>
-        <form id="depForm">
-          <label>Сума (+ поповнення / − зняття)<input name="amount" inputmode="decimal" placeholder="5000.00" required></label>
-          <label>Дата<input name="date" type="date" value="${today()}"></label>
-          <label>Нотатка<input name="note" placeholder="внесок за місяць"></label>
-          <button type="submit">Записати</button>
-        </form>
-        ${deposits.length ? `<table style="margin-top:12px"><thead><tr>
-          <th>Дата</th><th class="num">Сума</th><th>Нотатка</th><th></th></tr></thead><tbody>
-          ${deposits.map((d) => `<tr><td>${esc(d.date)}</td><td class="num">${fmtMoney(d.amount)}</td>
-            <td>${esc(d.note || "")}</td>
-            <td class="row-actions"><button class="sm warn" data-deldep="${d.id}">✕</button></td></tr>`).join("")}
-          </tbody></table>` : ""}
-      </div>
       <div class="card">
         <h2>Нова покупка</h2>
         <form id="lotForm">
@@ -313,21 +297,6 @@ class OddInvestPanel extends HTMLElement {
         catch (err) { this._toast(String(err.message || err), false); }
       }));
 
-    main.querySelector("#depForm").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const f = e.target;
-      try {
-        await this._api("POST", "deposits", {
-          amount: f.amount.value.trim(), date: f.date.value, note: f.note.value.trim(),
-        });
-        this._toast("Рух по рахунку записано"); this._loadTab();
-      } catch (err) { this._toast(String(err.message || err), false); }
-    });
-    main.querySelectorAll("[data-deldep]").forEach((b) =>
-      b.addEventListener("click", async () => {
-        try { await this._api("DELETE", "deposits/" + b.dataset.deldep); this._toast("Рух видалено"); this._loadTab(); }
-        catch (err) { this._toast(String(err.message || err), false); }
-      }));
 
     const isinInput = main.querySelector('input[name="isin"]');
     const dl = main.querySelector("#bondlist");
@@ -373,6 +342,46 @@ class OddInvestPanel extends HTMLElement {
         this._toast("Продаж записано"); this._loadTab();
       } catch (err) { this._toast(String(err.message || err), false); }
     });
+  }
+
+  // ---------- РАХУНОК ----------
+  async _renderAccount(main) {
+    const deposits = await this._api("GET", "deposits").catch(() => []);
+    const s = this._summary || {};
+    main.innerHTML = `
+      <div class="card">
+        <h2>Рахунок (гаманець)</h2>
+        <div class="tiles" style="margin:0 0 12px">
+          <div class="tile"><div class="lbl">Баланс</div><div class="val">${fmtUAH(s.account_uah)}</div></div>
+          <div class="tile"><div class="lbl">Разом (капітал)</div><div class="val">${fmtUAH((s.nominal_uah_eq || 0) + (s.account_uah || 0))}</div></div>
+        </div>
+        <div class="muted" style="margin-bottom:12px">Баланс = поповнення + отримані купони/погашення − вартість куплених лотів (грн-екв.). Купівля лота списує з рахунку автоматично.</div>
+        <form id="depForm">
+          <label>Сума (+ поповнення / − зняття)<input name="amount" inputmode="decimal" placeholder="5000.00" required></label>
+          <label>Дата<input name="date" type="date" value="${today()}"></label>
+          <label>Нотатка<input name="note" placeholder="внесок за місяць"></label>
+          <button type="submit">Записати</button>
+        </form>
+        ${deposits.length ? `<table style="margin-top:12px"><thead><tr>
+          <th>Дата</th><th class="num">Сума</th><th>Нотатка</th><th></th></tr></thead><tbody>
+          ${deposits.map((d) => `<tr><td>${esc(d.date)}</td><td class="num">${fmtMoney(d.amount)}</td>
+            <td>${esc(d.note || "")}</td>
+            <td class="row-actions"><button class="sm warn" data-deldep="${d.id}">✕</button></td></tr>`).join("")}
+          </tbody></table>` : `<div class="muted" style="margin-top:12px">Рухів по рахунку ще немає.</div>`}
+      </div>`;
+    main.querySelector("#depForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const f = e.target;
+      try {
+        await this._api("POST", "deposits", { amount: f.amount.value.trim(), date: f.date.value, note: f.note.value.trim() });
+        this._toast("Рух по рахунку записано"); this._loadTab();
+      } catch (err) { this._toast(String(err.message || err), false); }
+    });
+    main.querySelectorAll("[data-deldep]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        try { await this._api("DELETE", "deposits/" + b.dataset.deldep); this._toast("Рух видалено"); this._loadTab(); }
+        catch (err) { this._toast(String(err.message || err), false); }
+      }));
   }
 
   // ---------- КАЛЕНДАР ----------
@@ -492,6 +501,7 @@ class OddInvestPanel extends HTMLElement {
     const series = [
       { name: "Вкладено (грн-екв.)", color: "var(--primary-color)", values: snaps.map((s) => s.invested_uah) },
       { name: "Номінал", color: "var(--info-color, #039be5)", values: snaps.map((s) => s.nominal_uah_eq) },
+      { name: "Рахунок", color: "#8e24aa", values: snaps.map((s) => s.account_uah || 0) },
     ];
     if (anyTarget) series.push({ name: "План (накопич.)", color: "var(--warning-color, #ffa600)", values: plan, dash: true });
     main.innerHTML = `

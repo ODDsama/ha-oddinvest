@@ -38,6 +38,9 @@
       "account_uah": {
         "name": "Cash account"
       },
+      "total_capital_uah": {
+        "name": "Total capital"
+      },
       "month_invested_uah": {
         "name": "Monthly contributions"
       },
