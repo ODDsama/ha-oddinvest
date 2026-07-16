@@ -30,6 +30,8 @@ class OddInvestPanel extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._tab = "portfolio";
     this._inited = false;
+    this._reinvestAll = [];
+    this._rv = { cur: "", year: "", minRate: "", q: "", sortKey: "", sortDir: -1, page: 1, pageSize: 10 };
   }
 
   set hass(hass) {
@@ -117,6 +119,13 @@ class OddInvestPanel extends HTMLElement {
         .pill.reinv { background:var(--success-color,#43a047); color:#fff; }
         .pill.recv { background:var(--info-color,#039be5); color:#fff; }
         .row-actions { display:flex; gap:6px; }
+        .rv-controls { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+        .rv-controls input, .rv-controls select { padding:6px 8px; font-size:13px; }
+        .rv-controls input { max-width:150px; }
+        th.sort { cursor:pointer; user-select:none; white-space:nowrap; }
+        th.sort:hover { color:var(--primary-color); }
+        .rv-pager { display:flex; align-items:center; gap:8px; margin-top:10px; flex-wrap:wrap; }
+        .rv-pager .sp { flex:1; }
         .suggest { position:absolute; top:100%; left:0; right:0; z-index:6; margin-top:2px;
                    background:var(--card-background-color); border:1px solid var(--divider-color);
                    border-radius:8px; max-height:240px; overflow:auto; display:none;
@@ -228,6 +237,92 @@ class OddInvestPanel extends HTMLElement {
     }
   }
 
+  // ---------- ПОМІЧНИК РЕІНВЕСТИЦІЇ: фільтри / сортування / пагінація ----------
+  _rvOptions(kind, allLabel) {
+    const set = new Set();
+    for (const x of this._reinvestAll) {
+      set.add(kind === "cur" ? x.currency : String(x.maturity).slice(0, 4));
+    }
+    const vals = [...set].filter(Boolean).sort();
+    const sel = kind === "cur" ? this._rv.cur : this._rv.year;
+    return `<option value="">${allLabel}</option>` +
+      vals.map((v) => `<option value="${esc(v)}"${sel === v ? " selected" : ""}>${esc(v)}</option>`).join("");
+  }
+
+  _rvFilteredSorted() {
+    const v = this._rv;
+    let a = this._reinvestAll.filter((x) =>
+      (!v.cur || x.currency === v.cur) &&
+      (v.minRate === "" || parseFloat(x.rate_pct) >= parseFloat(v.minRate)) &&
+      (!v.year || String(x.maturity).startsWith(v.year)) &&
+      (!v.q || String(x.isin).toLowerCase().includes(v.q.toLowerCase())));
+    if (v.sortKey) {
+      const val = (x) => v.sortKey === "rate_pct" ? parseFloat(x.rate_pct)
+        : v.sortKey === "nominal" ? Number(x.nominal && x.nominal.amount)
+          : v.sortKey === "affordable" ? Number(x.affordable)
+            : String(x.maturity);
+      a = a.slice().sort((p, q) => { const pv = val(p), qv = val(q); return (pv < qv ? -1 : pv > qv ? 1 : 0) * v.sortDir; });
+    }
+    return a;
+  }
+
+  _rvRender(root) {
+    const box = root.querySelector("#rvTable");
+    if (!box) return;
+    const v = this._rv;
+    const rows = this._rvFilteredSorted();
+    const total = rows.length;
+    const size = v.pageSize === "all" ? (total || 1) : v.pageSize;
+    const pages = Math.max(1, Math.ceil(total / size));
+    if (v.page > pages) v.page = pages;
+    const start = (v.page - 1) * size;
+    const paged = v.pageSize === "all" ? rows : rows.slice(start, start + size);
+    const arrow = (k) => v.sortKey === k ? (v.sortDir === 1 ? " ▲" : " ▼") : "";
+    box.innerHTML = `
+      <table><thead><tr>
+        <th>ISIN</th>
+        <th class="num sort" data-sort="rate_pct">Ставка${arrow("rate_pct")}</th>
+        <th class="sort" data-sort="maturity">Погашення${arrow("maturity")}</th>
+        <th class="num sort" data-sort="nominal">Номінал${arrow("nominal")}</th>
+        <th class="num sort" data-sort="affordable">Вистачає${arrow("affordable")}</th>
+        <th>Чому</th><th></th></tr></thead><tbody>
+        ${paged.length ? paged.map((x) => `<tr>
+          <td>${esc(x.isin)}</td><td class="num">${x.rate_pct}%</td><td>${esc(x.maturity)}</td>
+          <td class="num">${fmtMoney(x.nominal)}</td><td class="num">${x.affordable}</td><td>${esc(x.reason)}</td>
+          <td class="row-actions"><button class="sm" data-take="${esc(x.isin)}">Взяти</button></td></tr>`).join("")
+        : `<tr><td colspan="7" class="muted">Нічого не знайдено за фільтром.</td></tr>`}
+      </tbody></table>
+      <div class="rv-pager">
+        <span class="muted">${total} ${total === 1 ? "папір" : "паперів"}</span>
+        <span class="sp"></span>
+        <button class="sm ghost" data-pg="prev"${v.page <= 1 ? " disabled" : ""}>‹ Назад</button>
+        <span class="muted">${v.page} / ${pages}</span>
+        <button class="sm ghost" data-pg="next"${v.page >= pages ? " disabled" : ""}>Далі ›</button>
+      </div>`;
+
+    box.querySelectorAll("[data-sort]").forEach((th) =>
+      th.addEventListener("click", () => {
+        const k = th.dataset.sort;
+        if (v.sortKey === k) v.sortDir *= -1;
+        else { v.sortKey = k; v.sortDir = k === "maturity" ? 1 : -1; }
+        this._rvRender(root);
+      }));
+    box.querySelectorAll("[data-pg]").forEach((b) =>
+      b.addEventListener("click", () => {
+        if (b.dataset.pg === "prev" && v.page > 1) v.page--;
+        if (b.dataset.pg === "next") v.page++;
+        this._rvRender(root);
+      }));
+    box.querySelectorAll("[data-take]").forEach((b) =>
+      b.addEventListener("click", () => {
+        const f = root.querySelector("#lotForm");
+        f.isin.value = b.dataset.take;
+        f.isin.dispatchEvent(new Event("change"));
+        f.scrollIntoView({ behavior: "smooth", block: "center" });
+        f.qty.focus();
+      }));
+  }
+
   // ---------- ПОРТФЕЛЬ ----------
   async _renderPortfolio(main) {
     const [positions, lots, sales, reinvest] = await Promise.all([
@@ -236,16 +331,23 @@ class OddInvestPanel extends HTMLElement {
       this._api("GET", "sales"),
       this._api("GET", "reinvest").then((r) => r || []).catch(() => []),
     ]);
+    this._reinvestAll = reinvest;
+    this._rv.page = 1;
     main.innerHTML = `
       ${reinvest.length ? `<div class="card" id="reinvestCard">
         <h2>Помічник реінвестиції</h2>
         <div class="muted" style="margin-bottom:10px">Доступні папери під твій план: валюта, яку треба добрати → рік з «діркою» в драбині → ставка. «Дохідність» = купонна ставка (ОВДП біля номіналу). Обери й тисни «Взяти».</div>
-        <table><thead><tr><th>ISIN</th><th class="num">Ставка</th><th>Погашення</th><th class="num">Номінал</th><th class="num">Вистачає</th><th>Чому</th><th></th></tr></thead><tbody>
-        ${reinvest.map((x) => `<tr>
-          <td>${esc(x.isin)}</td><td class="num">${x.rate_pct}%</td><td>${esc(x.maturity)}</td>
-          <td class="num">${fmtMoney(x.nominal)}</td><td class="num">${x.affordable}</td><td>${esc(x.reason)}</td>
-          <td class="row-actions"><button class="sm" data-take="${esc(x.isin)}">Взяти</button></td></tr>`).join("")}
-        </tbody></table>
+        <div class="rv-controls">
+          <select data-f="cur">${this._rvOptions("cur", "Валюта: всі")}</select>
+          <select data-f="year">${this._rvOptions("year", "Рік: всі")}</select>
+          <input data-f="minRate" inputmode="decimal" placeholder="Ставка ≥, %" value="${esc(this._rv.minRate)}">
+          <input data-f="q" placeholder="Пошук ISIN" value="${esc(this._rv.q)}">
+          <select data-f="pageSize">
+            ${[10, 25, 50].map((n) => `<option value="${n}"${this._rv.pageSize === n ? " selected" : ""}>${n}/стор.</option>`).join("")}
+            <option value="all"${this._rv.pageSize === "all" ? " selected" : ""}>усі</option>
+          </select>
+        </div>
+        <div id="rvTable"></div>
       </div>` : ""}
       <div class="card">
         <h2>Нова покупка</h2>
@@ -326,14 +428,19 @@ class OddInvestPanel extends HTMLElement {
         catch (err) { this._toast(String(err.message || err), false); }
       }));
 
-    main.querySelectorAll("[data-take]").forEach((b) =>
-      b.addEventListener("click", () => {
-        const f = main.querySelector("#lotForm");
-        f.isin.value = b.dataset.take;
-        f.isin.dispatchEvent(new Event("change"));
-        f.scrollIntoView({ behavior: "smooth", block: "center" });
-        f.qty.focus();
-      }));
+    const rvCard = main.querySelector("#reinvestCard");
+    if (rvCard) {
+      rvCard.querySelectorAll("[data-f]").forEach((el) => {
+        const ev = el.tagName === "SELECT" ? "change" : "input";
+        el.addEventListener(ev, () => {
+          const f = el.dataset.f;
+          this._rv[f] = f === "pageSize" ? (el.value === "all" ? "all" : parseInt(el.value, 10)) : el.value;
+          this._rv.page = 1;
+          this._rvRender(main);
+        });
+      });
+      this._rvRender(main);
+    }
 
 
     const isinInput = main.querySelector('input[name="isin"]');
