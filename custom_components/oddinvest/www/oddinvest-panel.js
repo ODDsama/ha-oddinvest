@@ -755,56 +755,32 @@ class OddInvestPanel extends HTMLElement {
   }
 
   // ---------- ПРОЄКЦІЇ ----------
-  _fv(P0, C, annualPct, months) {
-    const i = annualPct / 100 / 12;
-    if (i <= 0) return P0 + C * months;
-    const g = Math.pow(1 + i, months);
-    return P0 * g + C * (g - 1) / i;
-  }
-  _requiredC(goal, P0, annualPct, months) {
-    if (months <= 0) return null;
-    const i = annualPct / 100 / 12;
-    if (i <= 0) return (goal - P0) / months;
-    const g = Math.pow(1 + i, months);
-    return (goal - P0 * g) / ((g - 1) / i);
-  }
-
   async _renderProjection(main) {
     const s = this._summary || {};
     const st = s.settings || {};
     const P0 = (s.nominal_uah_eq || 0) + (s.account_uah || 0);
     const C = s.month_target_uah || 0;
-    const py = s.portfolio_yield_pct;
-    // Ставка проєкції = очікувана дохідність за придбаними паперами
-    // (сер. купон портфеля, рахує бекенд). Стеля PROJ_CAP, щоб компаунд
-    // не вибухав.
-    const PROJ_CAP = 40;
-    let rate = 0, rateSrc = "додай папери — і дохідність порахується сама";
-    if (py != null && py > 0) { rate = Math.min(py, PROJ_CAP); rateSrc = `за портфелем ${py.toFixed(1)}% (сер. купон)`; }
+    const rowsData = s.projection || [];
+    const rate = s.projection_rate_pct || 0;
+    const rateSrc = rate > 0 ? `за портфелем ${rate.toFixed(1)}% (сер. купон)` : "додай папери — і дохідність порахується сама";
 
-    const rows = [1, 3, 5, 10].map((y) => {
-      const n = y * 12;
-      const base = P0 + C * n;
-      const fv = this._fv(P0, C, rate, n);
-      return `<tr><td>${y} р.</td><td class="num">${fmtUAH(base)}</td>
-        <td class="num">${fmtUAH(fv)}</td><td class="num">${fmtUAH(fv - base)}</td></tr>`;
-    }).join("");
+    const rows = rowsData.length ? rowsData.map((r) =>
+      `<tr><td>${r.years} р.</td><td class="num">${fmtUAH(r.contributed)}</td>
+        <td class="num">${fmtUAH(r.with_reinvest)}</td><td class="num">${fmtUAH(r.with_reinvest - r.contributed)}</td></tr>`).join("")
+      : `<tr><td colspan="4" class="muted">Додай папери й ціль на місяць, щоб побачити проєкцію.</td></tr>`;
 
     let goalHtml = `<div class="muted">Задай цільову суму й дату в «Налаштуваннях», щоб бачити трекер цілі.</div>`;
-    if (st.goal_amount_uah && st.goal_date) {
-      const now = new Date();
-      const gd = new Date(st.goal_date);
-      const months = Math.max(0, Math.round((gd - now) / (1000 * 60 * 60 * 24 * 30.4375)));
-      const proj = this._fv(P0, C, rate, months);
+    if (st.goal_amount_uah && st.goal_date && s.goal_months_left > 0) {
+      const proj = s.goal_projection || 0;
       const diff = proj - st.goal_amount_uah;
-      const reqC = this._requiredC(st.goal_amount_uah, P0, rate, months);
+      const reqC = s.goal_required_monthly || 0;
       const verdict = diff >= 0
         ? `<span style="color:var(--success-color,#43a047)">на шляху ✅ (запас ${fmtUAH(diff)})</span>`
         : `<span style="color:var(--error-color,#db4437)">бракує ${fmtUAH(-diff)}</span> — потрібно ≈ <b>${fmtUAH(Math.max(0, reqC))}</b>/міс (зараз ${fmtUAH(C)})`;
       goalHtml = `<div class="tiles" style="margin:0 0 10px">
           <div class="tile"><div class="lbl">Ціль</div><div class="val">${fmtUAH(st.goal_amount_uah)}</div></div>
           <div class="tile"><div class="lbl">Дата</div><div class="val">${esc(st.goal_date)}</div></div>
-          <div class="tile"><div class="lbl">Місяців лишилось</div><div class="val">${months}</div></div>
+          <div class="tile"><div class="lbl">Місяців лишилось</div><div class="val">${s.goal_months_left}</div></div>
           <div class="tile"><div class="lbl">Прогноз на дату</div><div class="val">${fmtUAH(proj)}</div></div>
         </div>
         <div>${verdict}</div>`;
@@ -813,7 +789,7 @@ class OddInvestPanel extends HTMLElement {
     main.innerHTML = `
       <div class="card">
         <h2>Проєкції капіталу</h2>
-        <div class="muted" style="margin-bottom:10px">Старт = капітал ${fmtUAH(P0)}, внесок = ${fmtUAH(C)}/міс, ставка = ${rateSrc} (реінвест щомісяця). Це припущення, не гарантія.</div>
+        <div class="muted" style="margin-bottom:10px">Старт = капітал ${fmtUAH(P0)}, внесок = ${fmtUAH(C)}/міс, ставка = ${rateSrc}. Модель: реальні купони й погашення наявних паперів + внески, реінвест під ставку; готівка не працює до реінвесту. Це припущення, не гарантія.</div>
         <table><thead><tr><th>Горизонт</th><th class="num">Внесено (без %)</th><th class="num">З реінвестом</th><th class="num">Приріст</th></tr></thead>
           <tbody>${rows}</tbody></table>
       </div>
