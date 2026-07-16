@@ -209,6 +209,10 @@ class OddInvestPanel extends HTMLElement {
     html += tile("Наступна виплата", s.next_payment
       ? `${esc(s.next_payment.date)} · ${Number(s.next_payment.amount).toLocaleString("uk-UA")} ${esc(s.next_payment.currency)}`
       : "—");
+    const py = s.portfolio_yield || {};
+    html += tile("Дохідність ₴", py.UAH != null ? py.UAH.toFixed(2) + "%" : "—");
+    html += tile("Дохідність $", py.USD != null ? py.USD.toFixed(2) + "%" : "—");
+    html += tile("Дохідність €", py.EUR != null ? py.EUR.toFixed(2) + "%" : "—");
     html += tile("XIRR ₴", x.UAH != null ? x.UAH.toFixed(2) + "%" : "—");
     html += tile("XIRR $", x.USD != null ? x.USD.toFixed(2) + "%" : "—");
     html += tile("XIRR €", x.EUR != null ? x.EUR.toFixed(2) + "%" : "—");
