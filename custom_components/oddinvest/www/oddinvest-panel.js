@@ -772,9 +772,13 @@ class OddInvestPanel extends HTMLElement {
     const C = s.month_target_uah || 0;
     const xirr = (s.xirr || {}).UAH;
     const assumed = st.assumed_rate_pct;
-    const rate = (xirr != null && xirr > 0) ? xirr : (assumed || 0);
-    const rateSrc = (xirr != null && xirr > 0) ? `XIRR ${xirr.toFixed(1)}%`
-      : (assumed ? `очікувана ${assumed}%` : "ставка не задана");
+    // Проєкція: пріоритет — задана «Очікувана дохідність». XIRR лише як
+    // запасний варіант і лише якщо реалістичний: ануалізація на короткій
+    // історії дає сотні % → компаунд вибухає. Стеля PROJ_CAP.
+    const PROJ_CAP = 40;
+    let rate = 0, rateSrc = "ставку не задано — вкажи «Очікувану дохідність» у Налаштуваннях";
+    if (assumed != null && assumed !== "" && Number(assumed) > 0) { rate = Math.min(Number(assumed), PROJ_CAP); rateSrc = `очікувана ${Number(assumed)}%`; }
+    else if (xirr != null && xirr > 0 && xirr <= PROJ_CAP) { rate = xirr; rateSrc = `XIRR ${xirr.toFixed(1)}%`; }
 
     const rows = [1, 3, 5, 10].map((y) => {
       const n = y * 12;
