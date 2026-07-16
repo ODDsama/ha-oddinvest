@@ -770,15 +770,15 @@ class OddInvestPanel extends HTMLElement {
     const st = s.settings || {};
     const P0 = (s.nominal_uah_eq || 0) + (s.account_uah || 0);
     const C = s.month_target_uah || 0;
-    const xirr = (s.xirr || {}).UAH;
+    const py = s.portfolio_yield_pct;
     const assumed = st.assumed_rate_pct;
-    // Проєкція: пріоритет — задана «Очікувана дохідність». XIRR лише як
-    // запасний варіант і лише якщо реалістичний: ануалізація на короткій
-    // історії дає сотні % → компаунд вибухає. Стеля PROJ_CAP.
+    // Ставка проєкції = очікувана дохідність за придбаними паперами
+    // (сер. купон портфеля, рахує бекенд). Ручне поле в Налаштуваннях —
+    // лише опційне перевизначення. Стеля PROJ_CAP, щоб компаунд не вибухав.
     const PROJ_CAP = 40;
-    let rate = 0, rateSrc = "ставку не задано — вкажи «Очікувану дохідність» у Налаштуваннях";
-    if (assumed != null && assumed !== "" && Number(assumed) > 0) { rate = Math.min(Number(assumed), PROJ_CAP); rateSrc = `очікувана ${Number(assumed)}%`; }
-    else if (xirr != null && xirr > 0 && xirr <= PROJ_CAP) { rate = xirr; rateSrc = `XIRR ${xirr.toFixed(1)}%`; }
+    let rate = 0, rateSrc = "додай папери — і дохідність порахується сама";
+    if (assumed != null && assumed !== "" && Number(assumed) > 0) { rate = Math.min(Number(assumed), PROJ_CAP); rateSrc = `задано вручну ${Number(assumed)}%`; }
+    else if (py != null && py > 0) { rate = Math.min(py, PROJ_CAP); rateSrc = `за портфелем ${py.toFixed(1)}% (сер. купон)`; }
 
     const rows = [1, 3, 5, 10].map((y) => {
       const n = y * 12;
@@ -831,7 +831,7 @@ class OddInvestPanel extends HTMLElement {
           <label>Ціль на місяць, ₴<input name="monthly_target_uah" inputmode="decimal" value="${esc(s.monthly_target_uah || "")}"></label>
           <label>Цільова частка USD, %<input name="usd_target_share_pct" inputmode="decimal" value="${esc(s.usd_target_share_pct || "")}"></label>
           <label>Цільова частка EUR, %<input name="eur_target_share_pct" inputmode="decimal" value="${esc(s.eur_target_share_pct || "")}"></label>
-          <label>Очікувана дохідність, %<input name="assumed_rate_pct" inputmode="decimal" placeholder="16" value="${esc(s.assumed_rate_pct || "")}"></label>
+          <label>Очікувана дохідність, %<input name="assumed_rate_pct" inputmode="decimal" placeholder="авто (за портфелем)" value="${esc(s.assumed_rate_pct || "")}"></label>
           <label>Ціль: сума, ₴<input name="goal_amount_uah" inputmode="decimal" value="${esc(s.goal_amount_uah || "")}"></label>
           <label>Ціль: дата<input name="goal_date" type="date" value="${esc(s.goal_date || "")}"></label>
           <button type="submit">Зберегти</button>
