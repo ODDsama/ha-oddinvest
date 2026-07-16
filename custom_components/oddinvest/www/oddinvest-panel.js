@@ -226,7 +226,7 @@ class OddInvestPanel extends HTMLElement {
       this._api("GET", "positions"),
       this._api("GET", "lots"),
       this._api("GET", "sales"),
-      this._api("GET", "reinvest").catch(() => []),
+      this._api("GET", "reinvest").then((r) => r || []).catch(() => []),
     ]);
     main.innerHTML = `
       ${reinvest.length ? `<div class="card" id="reinvestCard">
