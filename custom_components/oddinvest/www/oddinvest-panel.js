@@ -717,12 +717,23 @@ class OddInvestPanel extends HTMLElement {
       ${grid}${ylabels}${xlabels}${lines}</svg></div><div style="margin-top:8px">${legend}</div>`;
   }
 
+  _snapNonZero(s) {
+    return (s.invested_uah || 0) > 0 || (s.nominal_uah_eq || 0) > 0 || (s.account_uah || 0) > 0;
+  }
+
   async _renderDynamics(main) {
-    const snaps = await this._api("GET", "snapshots");
-    if (!snaps || snaps.length < 2) {
+    const all = await this._api("GET", "snapshots");
+    // Порожні знімки до появи портфеля (зроблені автоматично о 06:10 ще без
+    // даних) не малюємо — інакше вони «якорять» графік у нулі й лінія
+    // виглядає як фейковий стрибок 0 → капітал за один день.
+    let i = 0;
+    while (i < (all || []).length && !this._snapNonZero(all[i])) i++;
+    const snaps = (all || []).slice(i);
+    if (snaps.length < 2) {
       main.innerHTML = `<div class="card"><h2>Портфель у часі (добові знімки)</h2>
-        <div class="muted">Замало знімків для графіка. Вони пишуться щодня о 06:10
-        (або одразу, коли натиснути «↻ Оновити НБУ») — лінія з'явиться, щойно буде ≥2 знімки.${snaps && snaps.length === 1 ? " Наразі є 1." : ""}</div></div>`;
+        <div class="muted">Крива будується з добових знімків (пишуться щодня о 06:10,
+        або одразу після «↻ Оновити НБУ»). Потрібно ≥2 знімки з даними — наразі ${snaps.length}.
+        Порожні знімки до появи портфеля не рахуються.</div></div>`;
       return;
     }
     const dates = snaps.map((s) => s.date);
