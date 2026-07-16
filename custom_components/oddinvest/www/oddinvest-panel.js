@@ -258,6 +258,7 @@ class OddInvestPanel extends HTMLElement {
           <label>Нотатка<input name="note"></label>
           <button type="submit">Додати</button>
         </form>
+        <div class="muted" id="bondInfo" style="margin-top:8px"></div>
       </div>
 
       <div class="card">
@@ -322,6 +323,7 @@ class OddInvestPanel extends HTMLElement {
         const f = main.querySelector("#lotForm");
         f.isin.value = b.dataset.take;
         f.isin.dispatchEvent(new Event("input"));
+        f.isin.dispatchEvent(new Event("change"));
         f.scrollIntoView({ behavior: "smooth", block: "center" });
         f.qty.focus();
       }));
@@ -341,6 +343,21 @@ class OddInvestPanel extends HTMLElement {
             `<option value="${esc(b.isin)}">${esc(b.descr || "")} · ${b.rate_pct}% · до ${esc(b.maturity)}</option>`).join("");
         } catch (_) {}
       }, 300);
+    });
+
+    // авто-заповнення з довідника при виборі ISIN — далі лише коригуєш
+    isinInput.addEventListener("change", async () => {
+      const isin = isinInput.value.trim();
+      const info = main.querySelector("#bondInfo");
+      if (!isin) { if (info) info.textContent = ""; return; }
+      try {
+        const b = await this._api("GET", "bonds/" + encodeURIComponent(isin));
+        if (!b || !b.nominal) return;
+        const f = main.querySelector("#lotForm");
+        if (["UAH", "USD", "EUR"].includes(b.nominal.currency)) f.currency.value = b.nominal.currency;
+        if (!f.price_per_bond.value.trim()) f.price_per_bond.value = b.nominal.amount;
+        if (info) info.textContent = `${esc(b.descr || "")} · ${b.rate_pct}% · погашення ${esc(b.maturity)} · номінал ${fmtMoney(b.nominal)}`;
+      } catch (_) { if (info) info.textContent = ""; }
     });
 
     main.querySelector("#lotForm").addEventListener("submit", async (e) => {
