@@ -117,6 +117,14 @@ class OddInvestPanel extends HTMLElement {
         .pill.reinv { background:var(--success-color,#43a047); color:#fff; }
         .pill.recv { background:var(--info-color,#039be5); color:#fff; }
         .row-actions { display:flex; gap:6px; }
+        .suggest { position:absolute; top:100%; left:0; right:0; z-index:6; margin-top:2px;
+                   background:var(--card-background-color); border:1px solid var(--divider-color);
+                   border-radius:8px; max-height:240px; overflow:auto; display:none;
+                   box-shadow:var(--ha-card-box-shadow, 0 6px 16px rgba(0,0,0,.25)); }
+        .suggest.show { display:block; }
+        .suggest-item { padding:8px 10px; cursor:pointer; font-size:13px; white-space:nowrap;
+                        overflow:hidden; text-overflow:ellipsis; }
+        .suggest-item:hover { background:var(--secondary-background-color); }
         #cta { max-width:1080px; margin:0 auto; padding:0 20px; }
         .cta { background:var(--success-color,#43a047); color:#fff; border-radius:12px; padding:14px 18px;
                display:flex; align-items:center; gap:12px; flex-wrap:wrap; font-size:15px; }
@@ -242,8 +250,8 @@ class OddInvestPanel extends HTMLElement {
       <div class="card">
         <h2>Нова покупка</h2>
         <form id="lotForm">
-          <label>ISIN<input name="isin" list="bondlist" required placeholder="UA4000..." autocomplete="off"></label>
-          <datalist id="bondlist"></datalist>
+          <label style="position:relative">ISIN<input name="isin" required placeholder="UA4000..." autocomplete="off">
+            <div id="bondSuggest" class="suggest"></div></label>
           <label>Кількість<input name="qty" type="number" min="1" step="1" required></label>
           <label>Ціна за папір (брудна)<input name="price_per_bond" inputmode="decimal" placeholder="995.00" required></label>
           <label>Комісія (сумарно)<input name="fee" inputmode="decimal" placeholder="0.00"></label>
@@ -322,7 +330,6 @@ class OddInvestPanel extends HTMLElement {
       b.addEventListener("click", () => {
         const f = main.querySelector("#lotForm");
         f.isin.value = b.dataset.take;
-        f.isin.dispatchEvent(new Event("input"));
         f.isin.dispatchEvent(new Event("change"));
         f.scrollIntoView({ behavior: "smooth", block: "center" });
         f.qty.focus();
@@ -330,20 +337,32 @@ class OddInvestPanel extends HTMLElement {
 
 
     const isinInput = main.querySelector('input[name="isin"]');
-    const dl = main.querySelector("#bondlist");
+    const sug = main.querySelector("#bondSuggest");
+    const hideSug = () => sug.classList.remove("show");
     let dbt;
     isinInput.addEventListener("input", () => {
       clearTimeout(dbt);
       const q = isinInput.value.trim();
-      if (q.length < 2) return;
+      if (q.length < 2) { hideSug(); return; }
       dbt = setTimeout(async () => {
         try {
           const bonds = await this._api("GET", "bonds/search?q=" + encodeURIComponent(q));
-          dl.innerHTML = bonds.map((b) =>
-            `<option value="${esc(b.isin)}">${esc(b.descr || "")} · ${b.rate_pct}% · до ${esc(b.maturity)}</option>`).join("");
-        } catch (_) {}
+          if (!bonds || !bonds.length) { hideSug(); return; }
+          sug.innerHTML = bonds.map((b) =>
+            `<div class="suggest-item" data-isin="${esc(b.isin)}">${esc(b.isin)} · ${esc(b.descr || "")} · ${b.rate_pct}% · до ${esc(b.maturity)}</div>`).join("");
+          sug.classList.add("show");
+        } catch (_) { hideSug(); }
       }, 300);
     });
+    sug.addEventListener("mousedown", (e) => {
+      const it = e.target.closest("[data-isin]");
+      if (!it) return;
+      e.preventDefault();
+      isinInput.value = it.dataset.isin;
+      hideSug();
+      isinInput.dispatchEvent(new Event("change"));
+    });
+    isinInput.addEventListener("blur", () => setTimeout(hideSug, 150));
 
     // авто-заповнення з довідника при виборі ISIN — далі лише коригуєш
     isinInput.addEventListener("change", async () => {
