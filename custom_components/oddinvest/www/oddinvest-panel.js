@@ -240,7 +240,7 @@ class OddInvestPanel extends HTMLElement {
       ${reinvest.length ? `<div class="card" id="reinvestCard">
         <h2>Помічник реінвестиції</h2>
         <div class="muted" style="margin-bottom:10px">Доступні папери під твій план: валюта, яку треба добрати → рік з «діркою» в драбині → ставка. «Дохідність» = купонна ставка (ОВДП біля номіналу). Обери й тисни «Взяти».</div>
-        <table><thead><tr><th>ISIN</th><th class="num">Ставка</th><th>Погашення</th><th class="num">Номінал</th><th class="num">Вистачає</th><th>Чому</th><th></th></tr></thead><tbody>
+        <table><thead><tr><th>ISIN</th><th class="num">Купон, %</th><th>Погашення</th><th class="num">Номінал</th><th class="num">Вистачає</th><th>Чому</th><th></th></tr></thead><tbody>
         ${reinvest.map((x) => `<tr>
           <td>${esc(x.isin)}</td><td class="num">${x.rate_pct}%</td><td>${esc(x.maturity)}</td>
           <td class="num">${fmtMoney(x.nominal)}</td><td class="num">${x.affordable}</td><td>${esc(x.reason)}</td>
