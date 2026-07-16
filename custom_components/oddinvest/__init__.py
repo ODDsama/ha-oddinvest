@@ -22,6 +22,7 @@ from .const import (
     SIGNAL_AVAILABILITY,
     SIGNAL_STATE_UPDATED,
 )
+from .alerts import NotificationManager
 from .models import ContractError, StateDoc
 from .panel import async_setup_panel
 
@@ -41,6 +42,7 @@ class OddInvestData:
     state: StateDoc | None = None
     available: bool = False
     unsubscribers: list = field(default_factory=list)
+    alerts: object | None = None
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: OddInvestConfigEntry) -> bool:
@@ -80,10 +82,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: OddInvestConfigEntry) ->
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _register_services(hass)
     await async_setup_panel(hass)
+
+    data.alerts = NotificationManager(hass, entry)
+    await data.alerts.async_setup()
+    entry.async_on_unload(entry.add_update_listener(_options_updated))
     return True
 
 
+async def _options_updated(hass: HomeAssistant, entry: OddInvestConfigEntry) -> None:
+    """Зміна опцій (сповіщення) → перезавантажити запис."""
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
 async def async_unload_entry(hass: HomeAssistant, entry: OddInvestConfigEntry) -> bool:
+    if entry.runtime_data.alerts is not None:
+        entry.runtime_data.alerts.async_unload()
     for unsub in entry.runtime_data.unsubscribers:
         unsub()
     entry.runtime_data.unsubscribers.clear()

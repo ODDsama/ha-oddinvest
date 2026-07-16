@@ -18,6 +18,22 @@
       "already_configured": "Цей префікс уже налаштовано"
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Сповіщення ODD Invest",
+        "description": "Інтеграція сама шле сповіщення на обраний notify-сервіс — без ручних автоматизацій.",
+        "data": {
+          "notify_service": "notify-сервіс (напр. telegram або mobile_app_...)",
+          "notify_coupon": "Купон/погашення надійшло",
+          "notify_reinvest": "Можна реінвестувати",
+          "notify_tomorrow": "Завтра виплата",
+          "notify_goal": "Відставання від місячної цілі",
+          "goal_threshold": "Поріг цілі, % (нижче — попередити)"
+        }
+      }
+    }
+  },
   "entity": {
     "sensor": {
       "invested_uah": {

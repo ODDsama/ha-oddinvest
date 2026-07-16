@@ -6,7 +6,13 @@ from typing import Any
 
 import aiohttp
 import voluptuous as vol
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
+from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import CONF_BASE_URL, CONF_TOPIC_PREFIX, DEFAULT_PREFIX, DOMAIN
@@ -22,6 +28,11 @@ DATA_SCHEMA = vol.Schema(
 
 class OddInvestConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        return OddInvestOptionsFlow()
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -56,3 +67,28 @@ class OddInvestConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user", data_schema=DATA_SCHEMA, errors=errors
         )
+
+
+class OddInvestOptionsFlow(OptionsFlow):
+    """Налаштування сповіщень: notify-сервіс + які події слати."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        o = self.config_entry.options
+        schema = vol.Schema(
+            {
+                vol.Optional("notify_service", default=o.get("notify_service", "")): str,
+                vol.Optional("notify_coupon", default=o.get("notify_coupon", True)): bool,
+                vol.Optional("notify_reinvest", default=o.get("notify_reinvest", True)): bool,
+                vol.Optional("notify_tomorrow", default=o.get("notify_tomorrow", True)): bool,
+                vol.Optional("notify_goal", default=o.get("notify_goal", True)): bool,
+                vol.Optional("goal_threshold", default=o.get("goal_threshold", 80)): vol.All(
+                    vol.Coerce(int), vol.Range(min=0, max=100)
+                ),
+            }
+        )
+        return self.async_show_form(step_id="init", data_schema=schema)
