@@ -185,7 +185,7 @@ class OddInvestPanel extends HTMLElement {
         `${fmtUAH(s.month_invested_uah)} / ${fmtUAH(s.month_target_uah)} (${s.month_progress_pct || 0}%)`,
         `<div class="progress"><span style="width:${Math.min(100, s.month_progress_pct || 0)}%"></span></div>`) +
       tile("Не перевкладено", fmtUAH(s.uninvested_uah)) +
-      tile("Рахунок", fmtUAH(s.account_uah)) +
+      tile("Рахунок (грн-екв.)", fmtUAH(s.account_uah)) +
       tile("Разом (капітал)", fmtUAH((s.nominal_uah_eq || 0) + (s.account_uah || 0)));
     html += tile("Наступна виплата", s.next_payment
       ? `${esc(s.next_payment.date)} · ${Number(s.next_payment.amount).toLocaleString("uk-UA")} ${esc(s.next_payment.currency)}`
@@ -358,6 +358,10 @@ class OddInvestPanel extends HTMLElement {
     const s = this._summary || {};
     const a = s.accounts || {};
     const curOpts = (sel) => ["UAH", "USD", "EUR"].map((c) => `<option${c === sel ? " selected" : ""}>${c}</option>`).join("");
+    const moves = [
+      ...deposits.map((d) => ({ date: d.date, id: d.id, kind: "dep", amount: d.amount, note: d.note })),
+      ...conversions.map((c) => ({ date: c.date, id: c.id, kind: "conv", from: c.from, to: c.to, note: c.note })),
+    ].sort((x, y) => (x.date < y.date ? 1 : x.date > y.date ? -1 : y.id - x.id));
     main.innerHTML = `
       <div class="card">
         <h2>Рахунок (гаманець)</h2>
@@ -370,7 +374,7 @@ class OddInvestPanel extends HTMLElement {
       </div>
 
       <div class="card">
-        <h2>Рух коштів</h2>
+        <h2>Додати рух</h2>
         <div class="muted" style="margin-bottom:10px">Поповнення (+) / зняття (−) у своїй валюті. Купівля лота й купони рухають рахунок автоматично.</div>
         <form id="depForm">
           <label>Сума (+ / −)<input name="amount" inputmode="decimal" placeholder="5000.00" required></label>
@@ -379,12 +383,6 @@ class OddInvestPanel extends HTMLElement {
           <label>Нотатка<input name="note"></label>
           <button type="submit">Записати</button>
         </form>
-        ${deposits.length ? `<table style="margin-top:10px"><thead><tr>
-          <th>Дата</th><th class="num">Сума</th><th>Нотатка</th><th></th></tr></thead><tbody>
-          ${deposits.map((d) => `<tr><td>${esc(d.date)}</td><td class="num">${fmtMoney(d.amount)}</td>
-            <td>${esc(d.note || "")}</td>
-            <td class="row-actions"><button class="sm warn" data-deldep="${d.id}">✕</button></td></tr>`).join("")}
-          </tbody></table>` : ""}
       </div>
 
       <div class="card">
@@ -399,14 +397,25 @@ class OddInvestPanel extends HTMLElement {
           <label>Нотатка<input name="note"></label>
           <button type="submit">Записати</button>
         </form>
-        ${conversions.length ? `<table style="margin-top:10px"><thead><tr>
-          <th>Дата</th><th>Віддав</th><th>Отримав</th><th class="num">Курс</th><th></th></tr></thead><tbody>
-          ${conversions.map((c) => {
-            const rate = Number(c.from.amount) / Number(c.to.amount);
-            return `<tr><td>${esc(c.date)}</td><td>${fmtMoney(c.from)}</td><td>${fmtMoney(c.to)}</td>
-              <td class="num">${isFinite(rate) ? rate.toFixed(4) : "—"}</td>
-              <td class="row-actions"><button class="sm warn" data-delconv="${c.id}">✕</button></td></tr>`;
-          }).join("")}</tbody></table>` : ""}
+      </div>
+
+      <div class="card">
+        <h2>Історія рухів</h2>
+        ${moves.length ? `<table><thead><tr>
+          <th>Дата</th><th>Тип</th><th>Сума</th><th>Нотатка</th><th></th></tr></thead><tbody>
+          ${moves.map((m) => {
+            if (m.kind === "dep") {
+              const label = Number(m.amount.amount) >= 0 ? "Поповнення" : "Зняття";
+              return `<tr><td>${esc(m.date)}</td><td>${label}</td><td class="num">${fmtMoney(m.amount)}</td>
+                <td>${esc(m.note || "")}</td>
+                <td class="row-actions"><button class="sm warn" data-deldep="${m.id}">✕</button></td></tr>`;
+            }
+            const rate = Number(m.from.amount) / Number(m.to.amount);
+            return `<tr><td>${esc(m.date)}</td><td>Конвертація</td>
+              <td class="num">${fmtMoney(m.from)} → ${fmtMoney(m.to)}</td>
+              <td>${esc(m.note || "")}${isFinite(rate) ? ` (${rate.toFixed(4)})` : ""}</td>
+              <td class="row-actions"><button class="sm warn" data-delconv="${m.id}">✕</button></td></tr>`;
+          }).join("")}</tbody></table>` : `<div class="muted">Рухів ще немає.</div>`}
       </div>`;
 
     main.querySelector("#depForm").addEventListener("submit", async (e) => {
