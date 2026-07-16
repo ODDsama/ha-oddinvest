@@ -633,4 +633,6 @@ class OddInvestPanel extends HTMLElement {
   }
 }
 
-customElements.define("odd-invest-panel", OddInvestPanel);
+if (!customElements.get("odd-invest-panel")) {
+  customElements.define("odd-invest-panel", OddInvestPanel);
+}
