@@ -208,8 +208,10 @@ class OddInvestPanel extends HTMLElement {
         b.addEventListener("click", async () => {
           this._tab = "portfolio";
           await this._loadTab();
+          const rc = this.shadowRoot.querySelector("#reinvestCard");
           const f = this.shadowRoot.querySelector("#lotForm");
-          if (f) { f.scrollIntoView({ behavior: "smooth", block: "center" }); f.isin.focus(); }
+          if (rc) rc.scrollIntoView({ behavior: "smooth", block: "center" });
+          else if (f) { f.scrollIntoView({ behavior: "smooth", block: "center" }); f.isin.focus(); }
         }));
     } else {
       cta.innerHTML = "";
@@ -218,12 +220,23 @@ class OddInvestPanel extends HTMLElement {
 
   // ---------- ПОРТФЕЛЬ ----------
   async _renderPortfolio(main) {
-    const [positions, lots, sales] = await Promise.all([
+    const [positions, lots, sales, reinvest] = await Promise.all([
       this._api("GET", "positions"),
       this._api("GET", "lots"),
       this._api("GET", "sales"),
+      this._api("GET", "reinvest").catch(() => []),
     ]);
     main.innerHTML = `
+      ${reinvest.length ? `<div class="card" id="reinvestCard">
+        <h2>Помічник реінвестиції</h2>
+        <div class="muted" style="margin-bottom:10px">Доступні папери під твій план: валюта, яку треба добрати → рік з «діркою» в драбині → ставка. «Дохідність» = купонна ставка (ОВДП біля номіналу). Обери й тисни «Взяти».</div>
+        <table><thead><tr><th>ISIN</th><th class="num">Ставка</th><th>Погашення</th><th class="num">Номінал</th><th class="num">Вистачає</th><th>Чому</th><th></th></tr></thead><tbody>
+        ${reinvest.map((x) => `<tr>
+          <td>${esc(x.isin)}</td><td class="num">${x.rate_pct}%</td><td>${esc(x.maturity)}</td>
+          <td class="num">${fmtMoney(x.nominal)}</td><td class="num">${x.affordable}</td><td>${esc(x.reason)}</td>
+          <td class="row-actions"><button class="sm" data-take="${esc(x.isin)}">Взяти</button></td></tr>`).join("")}
+        </tbody></table>
+      </div>` : ""}
       <div class="card">
         <h2>Нова покупка</h2>
         <form id="lotForm">
@@ -300,6 +313,15 @@ class OddInvestPanel extends HTMLElement {
         if (!confirm("Видалити лот #" + b.dataset.del + "?")) return;
         try { await this._api("DELETE", "lots/" + b.dataset.del); this._toast("Лот видалено"); this._loadTab(); }
         catch (err) { this._toast(String(err.message || err), false); }
+      }));
+
+    main.querySelectorAll("[data-take]").forEach((b) =>
+      b.addEventListener("click", () => {
+        const f = main.querySelector("#lotForm");
+        f.isin.value = b.dataset.take;
+        f.isin.dispatchEvent(new Event("input"));
+        f.scrollIntoView({ behavior: "smooth", block: "center" });
+        f.qty.focus();
       }));
 
 
