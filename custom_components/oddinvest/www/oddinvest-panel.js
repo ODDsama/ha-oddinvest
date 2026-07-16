@@ -749,8 +749,8 @@ class OddInvestPanel extends HTMLElement {
       return acc;
     });
     const series = [
-      { name: "Вкладено (грн-екв.)", color: "var(--primary-color)", values: snaps.map((s) => s.invested_uah) },
-      { name: "Номінал", color: "var(--info-color, #039be5)", values: snaps.map((s) => s.nominal_uah_eq) },
+      { name: "Вкладено (грн-екв.)", color: "#4da3ff", values: snaps.map((s) => s.invested_uah) },
+      { name: "Номінал", color: "#2ecc71", values: snaps.map((s) => s.nominal_uah_eq) },
       { name: "Рахунок", color: "#8e24aa", values: snaps.map((s) => s.account_uah || 0) },
     ];
     if (anyTarget) series.push({ name: "План (накопич.)", color: "var(--warning-color, #ffa600)", values: plan, dash: true });
