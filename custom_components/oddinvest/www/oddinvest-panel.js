@@ -11,6 +11,7 @@ const TABS = [
   ["calendar", "Календар"],
   ["ladder", "Драбина"],
   ["dynamics", "Динаміка"],
+  ["projection", "Проєкції"],
   ["settings", "Налаштування"],
 ];
 
@@ -162,6 +163,7 @@ class OddInvestPanel extends HTMLElement {
       else if (this._tab === "calendar") await this._renderCalendar(main);
       else if (this._tab === "ladder") await this._renderLadder(main);
       else if (this._tab === "dynamics") await this._renderDynamics(main);
+      else if (this._tab === "projection") await this._renderProjection(main);
       else if (this._tab === "settings") await this._renderSettings(main);
     } catch (err) {
       main.innerHTML = `<div class="card">Помилка: ${esc(err.message || err)}</div>`;
@@ -605,6 +607,73 @@ class OddInvestPanel extends HTMLElement {
       </div>`;
   }
 
+  // ---------- ПРОЄКЦІЇ ----------
+  _fv(P0, C, annualPct, months) {
+    const i = annualPct / 100 / 12;
+    if (i <= 0) return P0 + C * months;
+    const g = Math.pow(1 + i, months);
+    return P0 * g + C * (g - 1) / i;
+  }
+  _requiredC(goal, P0, annualPct, months) {
+    if (months <= 0) return null;
+    const i = annualPct / 100 / 12;
+    if (i <= 0) return (goal - P0) / months;
+    const g = Math.pow(1 + i, months);
+    return (goal - P0 * g) / ((g - 1) / i);
+  }
+
+  async _renderProjection(main) {
+    const s = this._summary || {};
+    const st = s.settings || {};
+    const P0 = (s.nominal_uah_eq || 0) + (s.account_uah || 0);
+    const C = s.month_target_uah || 0;
+    const xirr = (s.xirr || {}).UAH;
+    const assumed = st.assumed_rate_pct;
+    const rate = (xirr != null && xirr > 0) ? xirr : (assumed || 0);
+    const rateSrc = (xirr != null && xirr > 0) ? `XIRR ${xirr.toFixed(1)}%`
+      : (assumed ? `очікувана ${assumed}%` : "ставка не задана");
+
+    const rows = [1, 3, 5, 10].map((y) => {
+      const n = y * 12;
+      const base = P0 + C * n;
+      const fv = this._fv(P0, C, rate, n);
+      return `<tr><td>${y} р.</td><td class="num">${fmtUAH(base)}</td>
+        <td class="num">${fmtUAH(fv)}</td><td class="num">${fmtUAH(fv - base)}</td></tr>`;
+    }).join("");
+
+    let goalHtml = `<div class="muted">Задай цільову суму й дату в «Налаштуваннях», щоб бачити трекер цілі.</div>`;
+    if (st.goal_amount_uah && st.goal_date) {
+      const now = new Date();
+      const gd = new Date(st.goal_date);
+      const months = Math.max(0, Math.round((gd - now) / (1000 * 60 * 60 * 24 * 30.4375)));
+      const proj = this._fv(P0, C, rate, months);
+      const diff = proj - st.goal_amount_uah;
+      const reqC = this._requiredC(st.goal_amount_uah, P0, rate, months);
+      const verdict = diff >= 0
+        ? `<span style="color:var(--success-color,#43a047)">на шляху ✅ (запас ${fmtUAH(diff)})</span>`
+        : `<span style="color:var(--error-color,#db4437)">бракує ${fmtUAH(-diff)}</span> — потрібно ≈ <b>${fmtUAH(Math.max(0, reqC))}</b>/міс (зараз ${fmtUAH(C)})`;
+      goalHtml = `<div class="tiles" style="margin:0 0 10px">
+          <div class="tile"><div class="lbl">Ціль</div><div class="val">${fmtUAH(st.goal_amount_uah)}</div></div>
+          <div class="tile"><div class="lbl">Дата</div><div class="val">${esc(st.goal_date)}</div></div>
+          <div class="tile"><div class="lbl">Місяців лишилось</div><div class="val">${months}</div></div>
+          <div class="tile"><div class="lbl">Прогноз на дату</div><div class="val">${fmtUAH(proj)}</div></div>
+        </div>
+        <div>${verdict}</div>`;
+    }
+
+    main.innerHTML = `
+      <div class="card">
+        <h2>Проєкції капіталу</h2>
+        <div class="muted" style="margin-bottom:10px">Старт = капітал ${fmtUAH(P0)}, внесок = ${fmtUAH(C)}/міс, ставка = ${rateSrc} (реінвест щомісяця). Це припущення, не гарантія.</div>
+        <table><thead><tr><th>Горизонт</th><th class="num">Внесено (без %)</th><th class="num">З реінвестом</th><th class="num">Приріст</th></tr></thead>
+          <tbody>${rows}</tbody></table>
+      </div>
+      <div class="card">
+        <h2>Ціль</h2>
+        ${goalHtml}
+      </div>`;
+  }
+
   // ---------- НАЛАШТУВАННЯ ----------
   async _renderSettings(main) {
     const s = await this._api("GET", "settings");
@@ -615,6 +684,9 @@ class OddInvestPanel extends HTMLElement {
           <label>Ціль на місяць, ₴<input name="monthly_target_uah" inputmode="decimal" value="${esc(s.monthly_target_uah || "")}"></label>
           <label>Цільова частка USD, %<input name="usd_target_share_pct" inputmode="decimal" value="${esc(s.usd_target_share_pct || "")}"></label>
           <label>Цільова частка EUR, %<input name="eur_target_share_pct" inputmode="decimal" value="${esc(s.eur_target_share_pct || "")}"></label>
+          <label>Очікувана дохідність, %<input name="assumed_rate_pct" inputmode="decimal" placeholder="16" value="${esc(s.assumed_rate_pct || "")}"></label>
+          <label>Ціль: сума, ₴<input name="goal_amount_uah" inputmode="decimal" value="${esc(s.goal_amount_uah || "")}"></label>
+          <label>Ціль: дата<input name="goal_date" type="date" value="${esc(s.goal_date || "")}"></label>
           <button type="submit">Зберегти</button>
         </form>
       </div>`;
@@ -626,6 +698,9 @@ class OddInvestPanel extends HTMLElement {
           monthly_target_uah: f.monthly_target_uah.value.trim(),
           usd_target_share_pct: f.usd_target_share_pct.value.trim(),
           eur_target_share_pct: f.eur_target_share_pct.value.trim(),
+          assumed_rate_pct: f.assumed_rate_pct.value.trim(),
+          goal_amount_uah: f.goal_amount_uah.value.trim(),
+          goal_date: f.goal_date.value.trim(),
         });
         this._toast("Налаштування збережено"); this._loadTab();
       } catch (err) { this._toast(String(err.message || err), false); }
