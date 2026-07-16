@@ -113,6 +113,11 @@ class OddInvestPanel extends HTMLElement {
         .pill.reinv { background:var(--success-color,#43a047); color:#fff; }
         .pill.recv { background:var(--info-color,#039be5); color:#fff; }
         .row-actions { display:flex; gap:6px; }
+        #cta { max-width:1080px; margin:0 auto; padding:0 20px; }
+        .cta { background:var(--success-color,#43a047); color:#fff; border-radius:12px; padding:14px 18px;
+               display:flex; align-items:center; gap:12px; flex-wrap:wrap; font-size:15px; }
+        .cta b { font-weight:700; }
+        .cta button { background:rgba(255,255,255,.22); margin-left:auto; }
         .bar { height:14px; border-radius:4px; display:inline-block; vertical-align:middle; }
         .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(80px);
                  padding:12px 20px; border-radius:10px; color:#fff; opacity:0; transition:.25s; z-index:9; max-width:80vw; }
@@ -127,6 +132,7 @@ class OddInvestPanel extends HTMLElement {
       </header>
       <nav>${TABS.map(([k, t]) => `<a data-tab="${k}">${t}</a>`).join("")}</nav>
       <div class="tiles" id="summary"></div>
+      <div id="cta"></div>
       <main id="main"></main>
       <div id="toast" class="toast"></div>
     `;
@@ -174,7 +180,8 @@ class OddInvestPanel extends HTMLElement {
       tile("Місяць: план",
         `${fmtUAH(s.month_invested_uah)} / ${fmtUAH(s.month_target_uah)} (${s.month_progress_pct || 0}%)`,
         `<div class="progress"><span style="width:${Math.min(100, s.month_progress_pct || 0)}%"></span></div>`) +
-      tile("Не перевкладено", fmtUAH(s.uninvested_uah));
+      tile("Не перевкладено", fmtUAH(s.uninvested_uah)) +
+      tile("Рахунок", fmtUAH(s.account_uah));
     html += tile("Наступна виплата", s.next_payment
       ? `${esc(s.next_payment.date)} · ${Number(s.next_payment.amount).toLocaleString("uk-UA")} ${esc(s.next_payment.currency)}`
       : "—");
@@ -182,16 +189,52 @@ class OddInvestPanel extends HTMLElement {
     html += tile("XIRR $", x.USD != null ? x.USD.toFixed(2) + "%" : "—");
     html += tile("XIRR €", x.EUR != null ? x.EUR.toFixed(2) + "%" : "—");
     this.shadowRoot.getElementById("summary").innerHTML = html;
+
+    // заклик до реінвестиції: на рахунку вистачає щонайменше на один папір
+    const cta = this.shadowRoot.getElementById("cta");
+    if (s.reinvest_min_uah > 0 && s.account_uah >= s.reinvest_min_uah) {
+      const n = Math.floor(s.account_uah / s.reinvest_min_uah);
+      cta.innerHTML = `<div class="cta">💰 На рахунку <b>${fmtUAH(s.account_uah)}</b> —
+        вистачає приблизно на <b>${n}</b> папер(и) (від ${fmtUAH(s.reinvest_min_uah)}).
+        <button id="ctaBtn">Реінвестувати →</button></div>`;
+      cta.querySelector("#ctaBtn").addEventListener("click", async () => {
+        this._tab = "portfolio";
+        await this._loadTab();
+        const f = this.shadowRoot.querySelector("#lotForm");
+        if (f) { f.scrollIntoView({ behavior: "smooth", block: "center" }); f.isin.focus(); }
+      });
+    } else {
+      cta.innerHTML = "";
+    }
   }
 
   // ---------- ПОРТФЕЛЬ ----------
   async _renderPortfolio(main) {
-    const [positions, lots, sales] = await Promise.all([
+    const [positions, lots, sales, deposits] = await Promise.all([
       this._api("GET", "positions"),
       this._api("GET", "lots"),
       this._api("GET", "sales"),
+      this._api("GET", "deposits").catch(() => []),
     ]);
     main.innerHTML = `
+      <div class="card">
+        <h2>Рахунок (гаманець)</h2>
+        <div class="tiles" style="margin:0 0 12px">
+          <div class="tile"><div class="lbl">Баланс</div><div class="val">${fmtUAH(this._summary.account_uah)}</div></div>
+        </div>
+        <form id="depForm">
+          <label>Сума (+ поповнення / − зняття)<input name="amount" inputmode="decimal" placeholder="5000.00" required></label>
+          <label>Дата<input name="date" type="date" value="${today()}"></label>
+          <label>Нотатка<input name="note" placeholder="внесок за місяць"></label>
+          <button type="submit">Записати</button>
+        </form>
+        ${deposits.length ? `<table style="margin-top:12px"><thead><tr>
+          <th>Дата</th><th class="num">Сума</th><th>Нотатка</th><th></th></tr></thead><tbody>
+          ${deposits.map((d) => `<tr><td>${esc(d.date)}</td><td class="num">${fmtMoney(d.amount)}</td>
+            <td>${esc(d.note || "")}</td>
+            <td class="row-actions"><button class="sm warn" data-deldep="${d.id}">✕</button></td></tr>`).join("")}
+          </tbody></table>` : ""}
+      </div>
       <div class="card">
         <h2>Нова покупка</h2>
         <form id="lotForm">
@@ -267,6 +310,22 @@ class OddInvestPanel extends HTMLElement {
       b.addEventListener("click", async () => {
         if (!confirm("Видалити лот #" + b.dataset.del + "?")) return;
         try { await this._api("DELETE", "lots/" + b.dataset.del); this._toast("Лот видалено"); this._loadTab(); }
+        catch (err) { this._toast(String(err.message || err), false); }
+      }));
+
+    main.querySelector("#depForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const f = e.target;
+      try {
+        await this._api("POST", "deposits", {
+          amount: f.amount.value.trim(), date: f.date.value, note: f.note.value.trim(),
+        });
+        this._toast("Рух по рахунку записано"); this._loadTab();
+      } catch (err) { this._toast(String(err.message || err), false); }
+    });
+    main.querySelectorAll("[data-deldep]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        try { await this._api("DELETE", "deposits/" + b.dataset.deldep); this._toast("Рух видалено"); this._loadTab(); }
         catch (err) { this._toast(String(err.message || err), false); }
       }));
 

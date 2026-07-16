@@ -70,6 +70,8 @@ class StateDoc:
     month_incoming_uah: float
     next_payment: NextPayment | None = None
     eur_share_pct: float = 0.0
+    account_uah: float = 0.0
+    reinvest_min_uah: float = 0.0
     ladder: tuple[LadderRow, ...] = field(default_factory=tuple)
     top_payments: tuple[PaymentRow, ...] = field(default_factory=tuple)
     # v0.2+ сервіса; за старого сервіса 0.1 — порожній
@@ -138,6 +140,8 @@ class StateDoc:
             month_incoming_uah=float(raw["month_incoming_uah"]),
             next_payment=np,
             eur_share_pct=float(raw.get("eur_share_pct", 0.0)),
+            account_uah=float(raw.get("account_uah", 0.0)),
+            reinvest_min_uah=float(raw.get("reinvest_min_uah", 0.0)),
             ladder=tuple(
                 LadderRow(
                     year=int(r["year"]),

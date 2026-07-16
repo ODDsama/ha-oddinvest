@@ -35,6 +35,9 @@
       "uninvested_uah": {
         "name": "Uninvested"
       },
+      "account_uah": {
+        "name": "Cash account"
+      },
       "month_invested_uah": {
         "name": "Monthly contributions"
       },
@@ -60,6 +63,9 @@
     "binary_sensor": {
       "has_uninvested": {
         "name": "Uninvested payouts present"
+      },
+      "reinvest_ready": {
+        "name": "Reinvest ready"
       }
     },
     "calendar": {

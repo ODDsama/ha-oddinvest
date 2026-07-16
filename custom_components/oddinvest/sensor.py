@@ -110,6 +110,15 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         value_fn=lambda d: d.uninvested_uah,
     ),
     OddInvestSensorDescription(
+        key="account_uah",
+        translation_key="account_uah",
+        native_unit_of_measurement="UAH",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        suggested_display_precision=0,
+        value_fn=lambda d: d.account_uah,
+    ),
+    OddInvestSensorDescription(
         key="month_invested_uah",
         translation_key="month_invested_uah",
         native_unit_of_measurement="UAH",

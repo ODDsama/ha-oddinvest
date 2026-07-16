@@ -35,6 +35,9 @@
       "uninvested_uah": {
         "name": "Не перевкладено"
       },
+      "account_uah": {
+        "name": "Рахунок"
+      },
       "month_invested_uah": {
         "name": "Внески за місяць"
       },
@@ -60,6 +63,9 @@
     "binary_sensor": {
       "has_uninvested": {
         "name": "Є неперевкладені виплати"
+      },
+      "reinvest_ready": {
+        "name": "Можна реінвестувати"
       }
     },
     "calendar": {
