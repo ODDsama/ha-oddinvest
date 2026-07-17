@@ -755,7 +755,8 @@ class OddInvestPanel extends HTMLElement {
     ];
     if (anyTarget) series.push({ name: "План (накопич.)", color: "var(--warning-color, #ffa600)", values: plan, dash: true });
     main.innerHTML = `
-      <div class="card"><h2>Портфель у часі · факт vs план</h2>${this._chartSVG(dates, series)}</div>
+      <div class="card"><h2>Портфель у часі · факт vs план</h2>${this._chartSVG(dates, series)}
+        <div class="muted" style="margin-top:8px;font-size:13px">«План (накопич.)» — цільовий темп вкладень наростаючим підсумком (місячна ціль ÷ дні місяця). Факт вище пунктиру = випереджаєш план, нижче = відстаєш.</div></div>
       <div class="card"><h2>Останні знімки</h2>
         <table><thead><tr><th>Дата</th><th class="num">Вкладено</th><th class="num">Номінал</th>
           <th class="num">Частка USD</th><th class="num">Не перевкл.</th></tr></thead>
