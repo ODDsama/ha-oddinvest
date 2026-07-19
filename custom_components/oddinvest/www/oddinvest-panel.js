@@ -6,12 +6,11 @@
 const PAY_TYPES = { 1: "купон", 2: "погашення", 3: "дострокове" };
 const PAY_CLASS = { 1: "coupon", 2: "redemption", 3: "early" };
 const TABS = [
+  ["overview", "Огляд"],
   ["portfolio", "Портфель"],
   ["account", "Рахунок"],
-  ["calendar", "Календар"],
-  ["ladder", "Драбина"],
-  ["dynamics", "Динаміка"],
-  ["projection", "Проєкції"],
+  ["plan", "План"],
+  ["future", "Майбутнє"],
   ["settings", "Налаштування"],
 ];
 
@@ -21,6 +20,7 @@ const fmtCur = (v, cur) =>
   (Number(v) || 0).toLocaleString("uk-UA", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + cur;
 const fmtMoney = (m) =>
   m ? `${Number(m.amount).toLocaleString("uk-UA", { minimumFractionDigits: 2 })} ${m.currency}` : "—";
+const curSym = (c) => ({ UAH: "₴", USD: "$", EUR: "€" }[c] || c);
 const today = () => new Date().toISOString().slice(0, 10);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
@@ -28,7 +28,7 @@ class OddInvestPanel extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
-    this._tab = "portfolio";
+    this._tab = "overview";
     this._inited = false;
     this._reinvestAll = [];
     this._rv = { cur: "", year: "", minRate: "", q: "", sortKey: "", sortDir: -1, page: 1, pageSize: 10 };
@@ -140,6 +140,26 @@ class OddInvestPanel extends HTMLElement {
         .cta b { font-weight:700; }
         .cta button { background:rgba(255,255,255,.22); margin-left:auto; }
         .bar { height:14px; border-radius:4px; display:inline-block; vertical-align:middle; }
+        .banner { display:flex; align-items:flex-start; gap:12px; border-radius:12px; padding:14px 18px; margin-bottom:12px; }
+        .banner .b-ic { font-size:18px; line-height:1.4; }
+        .banner .b-tx { flex:1; }
+        .banner .b-t { font-size:16px; }
+        .banner .b-s { font-size:13px; opacity:.9; margin-top:3px; }
+        .banner button { margin-left:auto; align-self:center; white-space:nowrap; }
+        .banner.ok { background:var(--success-color,#43a047); color:#fff; }
+        .banner.ok button { background:rgba(255,255,255,.24); color:#fff; }
+        .banner.wait { background:var(--warning-color,#ffa600); color:#1b1b1b; }
+        .banner.neutral { background:var(--card-background-color); border:1px solid var(--divider-color);
+                          box-shadow:var(--ha-card-box-shadow, 0 2px 4px rgba(0,0,0,.1)); }
+        .quick { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+        .quick button { flex:1; min-width:130px; background:var(--card-background-color);
+                        color:var(--primary-text-color); border:1px solid var(--divider-color); }
+        .quick button:hover { border-color:var(--primary-color); color:var(--primary-color); }
+        .ov-grid { display:grid; grid-template-columns:1.5fr 1fr; gap:12px; align-items:start; }
+        @media (max-width:820px) { .ov-grid { grid-template-columns:1fr; } }
+        .pv-row { display:flex; justify-content:space-between; font-size:14px; padding:7px 0;
+                  border-bottom:1px solid var(--divider-color); }
+        .pv-row:last-of-type { border-bottom:none; }
         .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(80px);
                  padding:12px 20px; border-radius:10px; color:#fff; opacity:0; transition:.25s; z-index:9; max-width:80vw; }
         .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
@@ -152,8 +172,6 @@ class OddInvestPanel extends HTMLElement {
         <button class="ghost" id="refresh">↻ Оновити НБУ</button>
       </header>
       <nav>${TABS.map(([k, t]) => `<a data-tab="${k}">${t}</a>`).join("")}</nav>
-      <div class="tiles" id="summary"></div>
-      <div id="cta"></div>
       <main id="main"></main>
       <div id="toast" class="toast"></div>
     `;
@@ -174,70 +192,134 @@ class OddInvestPanel extends HTMLElement {
     const main = this.shadowRoot.getElementById("main");
     main.innerHTML = `<div class="muted">Завантаження…</div>`;
     try {
-      await this._loadSummary();
-      if (this._tab === "portfolio") await this._renderPortfolio(main);
+      await this._loadSummaryData();
+      if (this._tab === "overview") await this._renderOverview(main);
+      else if (this._tab === "portfolio") await this._renderPortfolio(main);
       else if (this._tab === "account") await this._renderAccount(main);
-      else if (this._tab === "calendar") await this._renderCalendar(main);
-      else if (this._tab === "ladder") await this._renderLadder(main);
-      else if (this._tab === "dynamics") await this._renderDynamics(main);
-      else if (this._tab === "projection") await this._renderProjection(main);
+      else if (this._tab === "plan") await this._renderPlan(main);
+      else if (this._tab === "future") await this._renderFuture(main);
       else if (this._tab === "settings") await this._renderSettings(main);
     } catch (err) {
       main.innerHTML = `<div class="card">Помилка: ${esc(err.message || err)}</div>`;
     }
   }
 
-  // ---------- постійне зведення (на всіх вкладках) ----------
-  async _loadSummary() {
+  // ---------- дані зведення (без рендеру: плитки живуть у розділах) ----------
+  async _loadSummaryData() {
     const s = await this._api("GET", "summary");
     this._summary = s;
     const avail = this.shadowRoot.getElementById("avail");
     avail.textContent = s.generated_at ? "стан на " + new Date(s.generated_at).toLocaleString("uk-UA") : "";
-    const tile = (l, v, extra = "") => `<div class="tile"><div class="lbl">${l}</div><div class="val">${v}</div>${extra}</div>`;
-    const x = s.xirr || {};
-    let html =
-      tile("Вкладено (грн-екв.)", fmtUAH(s.invested_uah)) +
-      tile("Номінал (грн-екв.)", fmtUAH(s.nominal_uah_eq)) +
-      tile("Частка USD", (s.usd_share_pct || 0).toFixed(1) + "%") +
-      tile("Частка EUR", (s.eur_share_pct || 0).toFixed(1) + "%") +
-      tile("Місяць: план",
-        `${fmtUAH(s.month_invested_uah)} / ${fmtUAH(s.month_target_uah)} (${s.month_progress_pct || 0}%)`,
-        `<div class="progress"><span style="width:${Math.min(100, s.month_progress_pct || 0)}%"></span></div>`) +
-      tile("Не перевкладено", fmtUAH(s.uninvested_uah)) +
-      tile("Рахунок (грн-екв.)", fmtUAH(s.account_uah)) +
-      tile("Разом (капітал)", fmtUAH((s.nominal_uah_eq || 0) + (s.account_uah || 0)));
-    html += tile("Наступна виплата", s.next_payment
-      ? `${esc(s.next_payment.date)} · ${Number(s.next_payment.amount).toLocaleString("uk-UA")} ${esc(s.next_payment.currency)}`
-      : "—");
-    const py = s.portfolio_yield || {};
-    html += tile("Дохідність ₴", py.UAH != null ? py.UAH.toFixed(2) + "%" : "—");
-    html += tile("Дохідність $", py.USD != null ? py.USD.toFixed(2) + "%" : "—");
-    html += tile("Дохідність €", py.EUR != null ? py.EUR.toFixed(2) + "%" : "—");
-    html += tile("XIRR ₴", x.UAH != null ? x.UAH.toFixed(2) + "%" : "—");
-    html += tile("XIRR $", x.USD != null ? x.USD.toFixed(2) + "%" : "—");
-    html += tile("XIRR €", x.EUR != null ? x.EUR.toFixed(2) + "%" : "—");
-    this.shadowRoot.getElementById("summary").innerHTML = html;
+  }
 
-    // заклик до реінвестиції — по кожній валюті, де вистачає на папір
-    const cta = this.shadowRoot.getElementById("cta");
+  _tile(l, v, extra = "") {
+    return `<div class="tile"><div class="lbl">${l}</div><div class="val">${v}</div>${extra}</div>`;
+  }
+
+  // ---------- ОГЛЯД ----------
+  // Банер дії показуємо ЗАВЖДИ — він ніколи не порожній і завжди каже,
+  // що робити: почати, купити або накопичувати далі.
+  _actionBannerHTML() {
+    const s = this._summary || {};
     const acc = s.accounts || {}, rmin = s.reinvest_min || {};
+    const hasPortfolio = (s.nominal_uah_eq || 0) > 0;
     const ready = Object.keys(rmin).filter((c) => rmin[c] > 0 && (acc[c] || 0) >= rmin[c]);
+    const box = (cls, icon, title, sub, btn = "") =>
+      `<div class="banner ${cls}"><div class="b-ic">${icon}</div><div class="b-tx">
+         <div class="b-t">${title}</div>${sub ? `<div class="b-s">${sub}</div>` : ""}</div>${btn}</div>`;
+
+    if (!hasPortfolio) {
+      return box("neutral", "◦", "Почни з першої покупки",
+        "Додай папір — і застосунок почне вести драбину, календар і проєкції.",
+        `<button data-go="buy">Купити папір</button>`);
+    }
     if (ready.length) {
-      cta.innerHTML = ready.map((c) => {
-        const n = Math.floor(acc[c] / rmin[c]);
-        return `<div class="cta">💰 На рахунку <b>${fmtCur(acc[c], c)}</b> — вистачає на <b>${n}</b> ${esc(c)}-папер(и) (від ${fmtCur(rmin[c], c)}). <button data-cta="1">Реінвестувати →</button></div>`;
-      }).join("");
-      cta.querySelectorAll("[data-cta]").forEach((b) =>
-        b.addEventListener("click", async () => {
-          this._tab = "portfolio";
-          await this._loadTab();
-          const rc = this.shadowRoot.querySelector("#reinvestCard");
-          const f = this.shadowRoot.querySelector("#lotForm");
-          if (rc) rc.scrollIntoView({ behavior: "smooth", block: "center" });
-          else if (f) { f.scrollIntoView({ behavior: "smooth", block: "center" }); f.isin.focus(); }
-        }));
-    } else {
-      cta.innerHTML = "";
+      const parts = ready.map((c) => `<b>${Math.floor(acc[c] / rmin[c])}</b> ${esc(c)}-папер(и)`).join(", ");
+      return box("ok", "●", `Можеш купити ${parts}`,
+        ready.map((c) => `${esc(c)}: на рахунку ${fmtCur(acc[c], c)}, папір від ${fmtCur(rmin[c], c)}`).join(" · "),
+        `<button data-go="pick">Обрати папір</button>`);
+    }
+    const need = Math.max(0, (s.reinvest_min_uah || 0) - (s.account_uah || 0));
+    const np = s.next_payment;
+    const sub = np
+      ? `На рахунку ${fmtUAH(s.account_uah)}, найдешевший папір ${fmtUAH(s.reinvest_min_uah)}. Купон ${esc(np.date)} додасть ${Number(np.amount).toLocaleString("uk-UA", { minimumFractionDigits: 2 })} ${curSym(np.currency)}.`
+      : `На рахунку ${fmtUAH(s.account_uah)}, найдешевший папір ${fmtUAH(s.reinvest_min_uah)}.`;
+    return box("wait", "○", `Купувати ще рано — бракує ${fmtUAH(need)}`, sub);
+  }
+
+  _goalStripHTML() {
+    const s = this._summary || {};
+    const st = s.settings || {};
+    if (!st.goal_amount_uah || !s.goal_months_left) return "";
+    const cap = (s.nominal_uah_eq || 0) + (s.account_uah || 0);
+    const pct = Math.min(100, (cap / st.goal_amount_uah) * 100);
+    const proj = s.goal_projection || 0;
+    const ok = proj >= st.goal_amount_uah;
+    const verdict = ok
+      ? `<span style="color:var(--success-color,#43a047)">на шляху · прогноз ${fmtUAH(proj)}</span>`
+      : `<span style="color:var(--error-color,#db4437)">бракує ${fmtUAH(st.goal_amount_uah - proj)} · прогноз ${fmtUAH(proj)}</span>`;
+    return `<div class="card" style="padding:14px 18px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+        <span>Ціль ${fmtUAH(st.goal_amount_uah)} до ${esc(String(st.goal_date || "").slice(0, 7))}</span>
+        <span style="font-size:13px">${verdict}</span>
+      </div>
+      <div class="progress"><span style="width:${pct}%"></span></div>
+      <div class="muted" style="font-size:13px;margin-top:6px">Накопичено ${pct.toFixed(1)}% · лишилось ${s.goal_months_left} міс</div>
+    </div>`;
+  }
+
+  _paymentsPreviewHTML() {
+    const rows = ((this._summary || {}).top_payments || []).slice(0, 4);
+    const body = rows.length
+      ? rows.map((p) => `<div class="pv-row"><span class="muted">${esc(p.date)}</span>
+          <span>${Number(p.amount).toLocaleString("uk-UA", { minimumFractionDigits: 2 })} ${curSym(p.currency)}</span></div>`).join("")
+      : `<div class="muted" style="font-size:13px">Виплат попереду немає.</div>`;
+    return `<div class="card"><h2>Найближчі виплати</h2>${body}
+      <div class="muted" style="font-size:12px;margin-top:8px">Повний календар — у «Майбутньому»</div></div>`;
+  }
+
+  async _renderOverview(main) {
+    const s = this._summary || {};
+    const cap = (s.nominal_uah_eq || 0) + (s.account_uah || 0);
+    const np = s.next_payment;
+    const tiles = `<div class="tiles" style="margin:0 0 12px;padding:0">
+      ${this._tile("Капітал", fmtUAH(cap))}
+      ${this._tile("Цей місяць", `${s.month_progress_pct || 0}%`,
+        `<div class="progress"><span style="width:${Math.min(100, s.month_progress_pct || 0)}%"></span></div>
+         <div class="muted" style="font-size:12px;margin-top:4px">${fmtUAH(s.month_invested_uah)} з ${fmtUAH(s.month_target_uah)}</div>`)}
+      ${this._tile("Наступна виплата",
+        np ? `${Number(np.amount).toLocaleString("uk-UA", { minimumFractionDigits: 2 })} ${curSym(np.currency)}` : "—",
+        np ? `<div class="muted" style="font-size:12px;margin-top:4px">${esc(np.date)}</div>` : "")}
+    </div>`;
+
+    const chart = await this._chartBlockHTML();
+    main.innerHTML = `
+      ${this._actionBannerHTML()}
+      <div class="quick">
+        <button data-go="buy">Купівля</button>
+        <button data-go="deposit">Поповнення</button>
+        <button data-go="convert">Конвертація</button>
+      </div>
+      ${tiles}
+      ${this._goalStripHTML()}
+      <div class="ov-grid">${chart}${this._paymentsPreviewHTML()}</div>
+      ${this._snapshotsTableHTML()}`;
+
+    main.querySelectorAll("[data-go]").forEach((b) =>
+      b.addEventListener("click", () => this._goto(b.dataset.go)));
+  }
+
+  // Швидкий перехід у потрібну форму з «Огляду».
+  async _goto(what) {
+    const map = { buy: "portfolio", pick: "portfolio", deposit: "account", convert: "account" };
+    this._tab = map[what] || "portfolio";
+    await this._loadTab();
+    const sel = { buy: "#lotForm", pick: "#reinvestCard", deposit: "#depForm", convert: "#convForm" }[what];
+    const el = this.shadowRoot.querySelector(sel) || this.shadowRoot.querySelector("#lotForm");
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      const first = el.querySelector && el.querySelector("input");
+      if (first && what !== "pick") first.focus();
     }
   }
 
@@ -333,6 +415,7 @@ class OddInvestPanel extends HTMLElement {
 
   // ---------- ПОРТФЕЛЬ ----------
   async _renderPortfolio(main) {
+    const s0 = this._summary || {};
     const [positions, lots, sales, reinvest] = await Promise.all([
       this._api("GET", "positions"),
       this._api("GET", "lots"),
@@ -341,7 +424,17 @@ class OddInvestPanel extends HTMLElement {
     ]);
     this._reinvestAll = reinvest;
     this._rv.page = 1;
+    const py = s0.portfolio_yield || {};
+    const yieldTile = (lbl, v) => this._tile(lbl, v != null ? v.toFixed(2) + "%" : "—");
+    const portTiles = `<div class="tiles" style="margin:0 0 12px;padding:0">
+      ${this._tile("Вкладено (грн-екв.)", fmtUAH(s0.invested_uah))}
+      ${this._tile("Номінал (грн-екв.)", fmtUAH(s0.nominal_uah_eq))}
+      ${yieldTile("Дохідність ₴", py.UAH)}
+      ${py.USD != null ? yieldTile("Дохідність $", py.USD) : ""}
+      ${py.EUR != null ? yieldTile("Дохідність €", py.EUR) : ""}
+    </div>`;
     main.innerHTML = `
+      ${portTiles}
       ${reinvest.length ? `<div class="card" id="reinvestCard">
         <h2>Помічник реінвестиції</h2>
         <div class="muted" style="margin-bottom:10px">Доступні папери під твій план: валюта, яку треба добрати → рік з «діркою» в драбині → ставка. «Дохідність» = купонна ставка (ОВДП біля номіналу). Обери й тисни «Взяти».</div>
@@ -357,7 +450,6 @@ class OddInvestPanel extends HTMLElement {
         </div>
         <div id="rvTable"></div>
       </div>` : ""}
-      ${this._rebalanceCard()}
       <div class="card">
         <h2>Нова покупка</h2>
         <form id="lotForm">
@@ -546,6 +638,8 @@ class OddInvestPanel extends HTMLElement {
           <div class="tile"><div class="lbl">USD</div><div class="val">${fmtCur(a.USD || 0, "$")}</div></div>
           <div class="tile"><div class="lbl">EUR</div><div class="val">${fmtCur(a.EUR || 0, "€")}</div></div>
           <div class="tile"><div class="lbl">Разом (грн-екв.)</div><div class="val">${fmtUAH(s.account_uah || 0)}</div></div>
+          <div class="tile"><div class="lbl">Не перевкладено</div><div class="val">${fmtUAH(s.uninvested_uah || 0)}</div>
+            <div class="muted" style="font-size:12px;margin-top:4px">надійшло й ще не вкладено</div></div>
         </div>
       </div>
 
@@ -663,7 +757,13 @@ class OddInvestPanel extends HTMLElement {
       }));
   }
 
-  // ---------- ДРАБИНА ----------
+  // ---------- МАЙБУТНЄ: календар + проєкції + ціль ----------
+  async _renderFuture(main) {
+    await this._renderCalendar(main);
+    main.insertAdjacentHTML("beforeend", this._projectionHTML());
+  }
+
+  // ---------- ПЛАН ----------
   // Валютне ребалансування: скільки бракує до цільових часток і чи це
   // взагалі досяжно (найдешевший папір може бути більший за цільову суму).
   _rebalanceCard() {
@@ -733,13 +833,23 @@ class OddInvestPanel extends HTMLElement {
     </div>`;
   }
 
-  async _renderLadder(main) {
+  async _renderPlan(main) {
+    const s = this._summary || {};
+    const st = s.settings || {};
+    const shareTile = (lbl, cur, tgt) => this._tile(lbl, (cur || 0).toFixed(1) + "%",
+      tgt ? `<div class="muted" style="font-size:12px;margin-top:4px">ціль ${tgt}%</div>` : "");
+    const shares = `<div class="tiles" style="margin:0 0 12px;padding:0">
+      ${shareTile("Частка USD", s.usd_share_pct, st.usd_target_share_pct)}
+      ${shareTile("Частка EUR", s.eur_share_pct, st.eur_target_share_pct)}
+    </div>`;
     const lad = (this._summary && this._summary.ladder) || [];
     const maxV = Math.max(1, ...lad.map((r) => Math.max(r.uah || 0, r.usd || 0, r.eur || 0)));
     const bar = (v, color) => v > 0
       ? `<span class="bar" style="width:${Math.max(4, (v / maxV) * 120)}px;background:${color}"></span>` : "";
     const fx = (v, sym) => v ? Number(v).toLocaleString("uk-UA", { minimumFractionDigits: 2 }) + " " + sym : "—";
     main.innerHTML = `
+      ${shares}
+      ${this._rebalanceCard()}
       <div class="card">
         <h2>Драбина погашень</h2>
         <div class="muted" style="margin-bottom:10px">Скільки номіналу повертається за роками (окремо UAH / USD / EUR).</div>
@@ -796,20 +906,21 @@ class OddInvestPanel extends HTMLElement {
     return (s.invested_uah || 0) > 0 || (s.nominal_uah_eq || 0) > 0 || (s.account_uah || 0) > 0;
   }
 
-  async _renderDynamics(main) {
-    const all = await this._api("GET", "snapshots");
+  // Блок «Як росте» — живе на «Огляді» (дивишся часто, окрема вкладка зайва).
+  async _chartBlockHTML() {
+    const all = await this._api("GET", "snapshots").catch(() => []);
     // Порожні знімки до появи портфеля (зроблені автоматично о 06:10 ще без
     // даних) не малюємо — інакше вони «якорять» графік у нулі й лінія
     // виглядає як фейковий стрибок 0 → капітал за один день.
     let i = 0;
     while (i < (all || []).length && !this._snapNonZero(all[i])) i++;
     const snaps = (all || []).slice(i);
+    this._snapsCache = snaps;
     if (snaps.length < 2) {
-      main.innerHTML = `<div class="card"><h2>Портфель у часі (добові знімки)</h2>
+      return `<div class="card"><h2>Як росте</h2>
         <div class="muted">Крива будується з добових знімків (пишуться щодня о 06:10,
         або одразу після «↻ Оновити НБУ»). Потрібно ≥2 знімки з даними — наразі ${snaps.length}.
         Порожні знімки до появи портфеля не рахуються.</div></div>`;
-      return;
     }
     const dates = snaps.map((s) => s.date);
     // План — накопичувальна сума фактично діючих цілей: кожен день додає
@@ -829,20 +940,29 @@ class OddInvestPanel extends HTMLElement {
       { name: "Рахунок", color: "#8e24aa", values: snaps.map((s) => s.account_uah || 0) },
     ];
     if (anyTarget) series.push({ name: "План (накопич.)", color: "var(--warning-color, #ffa600)", values: plan, dash: true });
-    main.innerHTML = `
-      <div class="card"><h2>Портфель у часі · факт vs план</h2>${this._chartSVG(dates, series)}
-        <div class="muted" style="margin-top:8px;font-size:13px">«План (накопич.)» — цільовий темп вкладень наростаючим підсумком (місячна ціль ÷ дні місяця). Факт вище пунктиру = випереджаєш план, нижче = відстаєш.</div></div>
-      <div class="card"><h2>Останні знімки</h2>
-        <table><thead><tr><th>Дата</th><th class="num">Вкладено</th><th class="num">Номінал</th>
-          <th class="num">Частка USD</th><th class="num">Не перевкл.</th></tr></thead>
-        <tbody>${snaps.slice(-14).reverse().map((s) => `<tr>
-          <td>${esc(s.date)}</td><td class="num">${fmtUAH(s.invested_uah)}</td><td class="num">${fmtUAH(s.nominal_uah_eq)}</td>
-          <td class="num">${(s.usd_share_pct || 0).toFixed(1)}%</td><td class="num">${fmtUAH(s.uninvested_uah)}</td></tr>`).join("")}</tbody></table>
-      </div>`;
+    const x = (this._summary || {}).xirr || {};
+    const xirrLine = x.UAH != null
+      ? `Фактична дохідність (XIRR): <b>${x.UAH.toFixed(2)}%</b>`
+      : `Фактична дохідність з'явиться, коли набереться 30 днів історії`;
+    return `<div class="card"><h2>Як росте</h2>${this._chartSVG(dates, series)}
+      <div class="muted" style="margin-top:8px;font-size:13px">«План (накопич.)» — цільовий темп вкладень наростаючим підсумком (місячна ціль ÷ дні місяця). Факт вище пунктиру = випереджаєш план, нижче = відстаєш.</div>
+      <div class="muted" style="margin-top:8px;font-size:13px;border-top:1px solid var(--divider-color);padding-top:8px">${xirrLine}</div></div>`;
   }
 
-  // ---------- ПРОЄКЦІЇ ----------
-  async _renderProjection(main) {
+  _snapshotsTableHTML() {
+    const snaps = this._snapsCache || [];
+    if (snaps.length < 2) return "";
+    return `<div class="card"><h2>Останні знімки</h2>
+      <table><thead><tr><th>Дата</th><th class="num">Вкладено</th><th class="num">Номінал</th>
+        <th class="num">Частка USD</th><th class="num">Не перевкл.</th></tr></thead>
+      <tbody>${snaps.slice(-14).reverse().map((s) => `<tr>
+        <td>${esc(s.date)}</td><td class="num">${fmtUAH(s.invested_uah)}</td><td class="num">${fmtUAH(s.nominal_uah_eq)}</td>
+        <td class="num">${(s.usd_share_pct || 0).toFixed(1)}%</td><td class="num">${fmtUAH(s.uninvested_uah)}</td></tr>`).join("")}</tbody></table>
+    </div>`;
+  }
+
+  // ---------- ПРОЄКЦІЇ (блок вкладки «Майбутнє») ----------
+  _projectionHTML() {
     const s = this._summary || {};
     const st = s.settings || {};
     const P0 = (s.nominal_uah_eq || 0) + (s.account_uah || 0);
@@ -873,7 +993,7 @@ class OddInvestPanel extends HTMLElement {
         <div>${verdict}</div>`;
     }
 
-    main.innerHTML = `
+    return `
       <div class="card">
         <h2>Проєкції капіталу</h2>
         <div class="muted" style="margin-bottom:10px">Старт = капітал ${fmtUAH(P0)}, внесок = ${fmtUAH(C)}/міс, ставка = ${rateSrc}. Модель: реальні купони й погашення наявних паперів + внески, реінвест під ставку; готівка не працює до реінвесту. Це припущення, не гарантія.</div>
