@@ -287,7 +287,7 @@ class OddInvestPanel extends HTMLElement {
   _recommendedHTML(rec) {
     if (!rec || !rec.length) return "";
     const rows = rec.slice(0, 2).map((x) => `<div class="pv-row">
-      <span><b>${esc(x.isin)}</b> <span class="muted">· ${x.rate_pct}% · до ${esc(x.maturity)}</span></span>
+      <span><b>${esc(x.isin)}</b> <span class="muted">· ${fmtMoney(x.nominal)} · ${x.rate_pct}% · до ${esc(x.maturity)}</span></span>
       <span class="${x.can_buy ? "" : "muted"}">${x.can_buy ? `вистачає на ${x.affordable}` : "ще не по кишені"}</span></div>`).join("");
     return `<div class="card"><h2>Рекомендовано взяти</h2>${rows}
       <div style="margin-top:10px"><button class="sm" data-go="pick">Весь список →</button></div></div>`;
@@ -1087,6 +1087,12 @@ class OddInvestPanel extends HTMLElement {
           <label>Цільова частка EUR, %<input name="eur_target_share_pct" inputmode="decimal" value="${esc(s.eur_target_share_pct || "")}"></label>
           <label>Цільова дюрація, років<input name="target_duration_years" inputmode="decimal" placeholder="напр. 3" value="${esc(s.target_duration_years || "")}"></label>
           <label>Канали купівлі (через кому)<input name="channels" placeholder="mono, inzhur" value="${esc(s.channels || "")}"></label>
+          <label>Макс. строк погашення, років<input name="max_maturity_years" inputmode="decimal" placeholder="напр. 4 (0 = без межі)" value="${esc(s.max_maturity_years || "")}"></label>
+          <label>Що рекомендувати<select name="reinvest_rank">
+            ${[["plan","Під мій план (валюта → драбина → дюрація)"],["rate","Найвища ставка"],
+               ["short","Найкоротші до погашення"],["ladder","Заповнювати дірки в драбині"]]
+              .map(([v,t]) => `<option value="${v}"${(s.reinvest_rank||"plan")===v?" selected":""}>${t}</option>`).join("")}
+          </select></label>
           <label>Ціль: сума, ₴<input name="goal_amount_uah" inputmode="decimal" value="${esc(s.goal_amount_uah || "")}"></label>
           <label>Ціль: дата<input name="goal_date" type="date" value="${esc(s.goal_date || "")}"></label>
           <button type="submit">Зберегти</button>
@@ -1102,6 +1108,8 @@ class OddInvestPanel extends HTMLElement {
           eur_target_share_pct: f.eur_target_share_pct.value.trim(),
           target_duration_years: f.target_duration_years.value.trim(),
           channels: f.channels.value.trim(),
+          max_maturity_years: f.max_maturity_years.value.trim(),
+          reinvest_rank: f.reinvest_rank.value,
           goal_amount_uah: f.goal_amount_uah.value.trim(),
           goal_date: f.goal_date.value.trim(),
         });
