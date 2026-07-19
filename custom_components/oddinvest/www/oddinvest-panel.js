@@ -353,6 +353,7 @@ class OddInvestPanel extends HTMLElement {
         </div>
         <div id="rvTable"></div>
       </div>` : ""}
+      ${this._rebalanceCard()}
       <div class="card">
         <h2>Нова покупка</h2>
         <form id="lotForm">
@@ -659,6 +660,63 @@ class OddInvestPanel extends HTMLElement {
   }
 
   // ---------- ДРАБИНА ----------
+  // Валютне ребалансування: скільки бракує до цільових часток і чи це
+  // взагалі досяжно (найдешевший папір може бути більший за цільову суму).
+  _rebalanceCard() {
+    const rows = (this._summary && this._summary.rebalance) || [];
+    if (!rows.length) return "";
+    const sym = { USD: "$", EUR: "€" };
+    const num = (v, d = 2) => Number(v || 0).toLocaleString("uk-UA", { maximumFractionDigits: d });
+    const body = rows.map((r) => {
+      const s = sym[r.currency] || r.currency;
+      const head = `<b>${esc(r.currency)}</b> — ціль ${r.target_pct}%, зараз ${r.current_pct}%`;
+      if (r.deficit_uah <= 0) {
+        return `<div style="margin-bottom:12px">${head} — <span style="color:var(--success-color,#43a047)">ціль досягнута ✅</span></div>`;
+      }
+      const need = `Бракує до цілі: <b>${fmtUAH(r.deficit_uah)}</b> (≈ ${num(r.deficit_native)} ${s})`;
+      if (!r.feasible) {
+        return `<div style="margin-bottom:12px">${head}<br>${need}<br>
+          <span style="color:var(--warning-color,#ffa600)">⚠ Ще зарано:</span> найдешевший ${esc(r.currency)}-папір коштує
+          ${fmtUAH(r.bond_cost_uah)} (${num(r.bond_cost_native, 0)} ${s}) — це більше за всю цільову суму.
+          Один такий папір вписався б у ціль ${r.target_pct}% при капіталі <b>${fmtUAH(r.min_portfolio_uah)}</b>.</div>`;
+      }
+      const buy = r.can_buy > 0
+        ? `вистачає на <b>${r.can_buy}</b> папер(и)`
+        : `на папір бракує — сконвертуй ще ≈ <b>${fmtUAH(r.convert_uah)}</b>`;
+      return `<div style="margin-bottom:12px">${head}<br>${need}<br>
+        Найдешевший папір: ${num(r.bond_cost_native, 0)} ${s} ≈ ${fmtUAH(r.bond_cost_uah)}.
+        Готівка: ${num(r.cash_native)} ${s} — ${buy}.</div>`;
+    }).join("");
+    return `<div class="card"><h2>Валютне ребалансування</h2>
+      <div class="muted" style="margin-bottom:10px">Частки рахуються від сукупного капіталу (номінал + рахунок).</div>
+      ${body}</div>`;
+  }
+
+  // Процентний ризик: дюрація за реальним графіком виплат + сценарії.
+  _rateRiskCard() {
+    const rr = this._summary && this._summary.rate_risk;
+    if (!rr || !rr.duration_years) return "";
+    const scen = (rr.scenarios || []).map((x) => {
+      const col = x.change_pct >= 0 ? "var(--success-color,#43a047)" : "var(--error-color,#db4437)";
+      const sgn = v => (v > 0 ? "+" : "");
+      return `<tr><td>${sgn(x.delta_pp)}${x.delta_pp} п.п.</td>
+        <td class="num" style="color:${col}">${sgn(x.change_pct)}${x.change_pct}%</td>
+        <td class="num" style="color:${col}">${sgn(x.change_uah)}${fmtUAH(x.change_uah)}</td></tr>`;
+    }).join("");
+    return `<div class="card"><h2>Ризик ставок</h2>
+      <div class="tiles" style="margin:0 0 10px">
+        <div class="tile"><div class="lbl">Дюрація (Маколея)</div><div class="val">${rr.duration_years} р.</div></div>
+        <div class="tile"><div class="lbl">Модифікована</div><div class="val">${rr.modified_dur}</div></div>
+        <div class="tile"><div class="lbl">Приведена вартість</div><div class="val">${fmtUAH(rr.pv_uah)}</div></div>
+      </div>
+      <table><thead><tr><th>Зміна ставок</th><th class="num">Вартість</th><th class="num">У грошах</th></tr></thead>
+        <tbody>${scen}</tbody></table>
+      <div class="muted" style="margin-top:8px;font-size:13px">Дюрація — середньозважений строк повернення грошей.
+        Модифікована показує, на скільки % змінюється вартість при зміні ставок на 1 п.п.
+        <b>Тримаєш до погашення — просадка лише паперова</b>: ризик реалізується при продажі на вторинці.</div>
+    </div>`;
+  }
+
   async _renderLadder(main) {
     const lad = (this._summary && this._summary.ladder) || [];
     const maxV = Math.max(1, ...lad.map((r) => Math.max(r.uah || 0, r.usd || 0, r.eur || 0)));
@@ -677,7 +735,8 @@ class OddInvestPanel extends HTMLElement {
             <td class="num">${fx(r.usd, "$")}</td><td>${bar(r.usd, "var(--info-color,#039be5)")}</td>
             <td class="num">${fx(r.eur, "€")}</td><td>${bar(r.eur, "var(--warning-color,#ffa600)")}</td></tr>`).join("")}</tbody></table>`
           : `<div class="muted">Драбина порожня — додайте папери в портфель.</div>`}
-      </div>`;
+      </div>
+      ${this._rateRiskCard()}`;
   }
 
   // ---------- ДИНАМІКА ----------
