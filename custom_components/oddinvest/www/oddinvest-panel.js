@@ -241,10 +241,14 @@ class OddInvestPanel extends HTMLElement {
     }
     const need = Math.max(0, (s.reinvest_min_uah || 0) - (s.account_uah || 0));
     const np = s.next_payment;
-    const sub = np
-      ? `На рахунку ${fmtUAH(s.account_uah)}, найдешевший папір ${fmtUAH(s.reinvest_min_uah)}. Купон ${esc(np.date)} додасть ${Number(np.amount).toLocaleString("uk-UA", { minimumFractionDigits: 2 })} ${curSym(np.currency)}.`
-      : `На рахунку ${fmtUAH(s.account_uah)}, найдешевший папір ${fmtUAH(s.reinvest_min_uah)}.`;
-    return box("wait", "○", `Купувати ще рано — бракує ${fmtUAH(need)}`, sub);
+    // Скільки ще накопичувати за поточним темпом внесків — щоб банер казав
+    // «коли», а не лише «скільки». Купон, що покриває нестачу, — окремо.
+    const perDay = (s.month_target_uah || 0) / 30;
+    const days = perDay > 0 ? Math.ceil(need / perDay) : 0;
+    const eta = days > 0 ? ` ≈ <b>${days}</b> дн. за твоїм темпом` : "";
+    const sub = `На рахунку ${fmtUAH(s.account_uah)}, найдешевший папір ${fmtUAH(s.reinvest_min_uah)}.` +
+      (np ? ` Купон ${esc(np.date)} додасть ${Number(np.amount).toLocaleString("uk-UA", { minimumFractionDigits: 2 })} ${curSym(np.currency)}.` : "");
+    return box("wait", "○", `Купувати ще рано — бракує ${fmtUAH(need)}${eta}`, sub);
   }
 
   _goalStripHTML() {
@@ -278,12 +282,36 @@ class OddInvestPanel extends HTMLElement {
       <div class="muted" style="font-size:12px;margin-top:8px">Повний календар — у «Майбутньому»</div></div>`;
   }
 
+  // Топ-2 рекомендації — показуємо ЗАВЖДИ, навіть коли ще не по кишені:
+  // так видно, до чого накопичувати.
+  _recommendedHTML(rec) {
+    if (!rec || !rec.length) return "";
+    const rows = rec.slice(0, 2).map((x) => `<div class="pv-row">
+      <span><b>${esc(x.isin)}</b> <span class="muted">· ${x.rate_pct}% · до ${esc(x.maturity)}</span></span>
+      <span class="${x.can_buy ? "" : "muted"}">${x.can_buy ? `вистачає на ${x.affordable}` : "ще не по кишені"}</span></div>`).join("");
+    return `<div class="card"><h2>Рекомендовано взяти</h2>${rows}
+      <div style="margin-top:10px"><button class="sm" data-go="pick">Весь список →</button></div></div>`;
+  }
+
+  _nbuStaleHTML() {
+    const at = (this._summary || {}).nbu_refreshed_at;
+    if (!at) return "";
+    const days = Math.floor((Date.now() - new Date(at).getTime()) / 86400000);
+    if (days < 3) return "";
+    return `<div class="banner wait" style="padding:10px 16px"><div class="b-tx">
+      <div class="b-s" style="opacity:1">Довідник НБУ не оновлювався <b>${days} дн.</b> —
+      ставки й графіки виплат можуть бути несвіжі. Натисни «↻ Оновити НБУ».</div></div></div>`;
+  }
+
   async _renderOverview(main) {
     const s = this._summary || {};
+    const rec = await this._api("GET", "reinvest").then((r) => r || []).catch(() => []);
     const cap = (s.nominal_uah_eq || 0) + (s.account_uah || 0);
     const np = s.next_payment;
+    const accrued = s.accrued_uah || 0;
     const tiles = `<div class="tiles" style="margin:0 0 12px;padding:0">
-      ${this._tile("Капітал", fmtUAH(cap))}
+      ${this._tile("Капітал", fmtUAH(cap),
+        accrued > 0 ? `<div class="muted" style="font-size:12px;margin-top:4px">+ ${fmtUAH(accrued)} НКД зароблено</div>` : "")}
       ${this._tile("Цей місяць", `${s.month_progress_pct || 0}%`,
         `<div class="progress"><span style="width:${Math.min(100, s.month_progress_pct || 0)}%"></span></div>
          <div class="muted" style="font-size:12px;margin-top:4px">${fmtUAH(s.month_invested_uah)} з ${fmtUAH(s.month_target_uah)}</div>`)}
@@ -294,7 +322,9 @@ class OddInvestPanel extends HTMLElement {
 
     const chart = await this._chartBlockHTML();
     main.innerHTML = `
+      ${this._nbuStaleHTML()}
       ${this._actionBannerHTML()}
+      ${this._recommendedHTML(rec)}
       <div class="quick">
         <button data-go="buy">Купівля</button>
         <button data-go="deposit">Поповнення</button>
@@ -450,6 +480,8 @@ class OddInvestPanel extends HTMLElement {
     const portTiles = `<div class="tiles" style="margin:0 0 12px;padding:0">
       ${this._tile("Вкладено (грн-екв.)", fmtUAH(s0.invested_uah))}
       ${this._tile("Номінал (грн-екв.)", fmtUAH(s0.nominal_uah_eq))}
+      ${this._tile("Накопичений купон", fmtUAH(s0.accrued_uah || 0),
+        `<div class="muted" style="font-size:12px;margin-top:4px">зароблено, ще не виплачено</div>`)}
       ${Object.entries(py).map(([c, v]) => this._tile(`Дохідність ${curSym(c)}`, pct(v),
         `<div class="muted" style="font-size:12px;margin-top:4px">очікувана</div>`)).join("")}
       ${xirrTiles}
