@@ -439,14 +439,20 @@ class OddInvestPanel extends HTMLElement {
     ]);
     this._reinvestAll = reinvest;
     this._rv.page = 1;
-    const py = s0.portfolio_yield || {};
-    const yieldTile = (lbl, v) => this._tile(lbl, v != null ? v.toFixed(2) + "%" : "—");
+    // «Дохідність» — очікуване наперед (сер. купон), «XIRR» — фактично
+    // реалізоване. Тримаємо поруч, бо сенс саме в порівнянні.
+    const py = s0.portfolio_yield || {}, xr = s0.xirr || {};
+    const pct = (v) => v != null ? v.toFixed(2) + "%" : "—";
+    const xirrTiles = Object.keys(xr).length
+      ? Object.entries(xr).map(([c, v]) => this._tile(`XIRR ${curSym(c)}`, pct(v))).join("")
+      : this._tile("XIRR", "—",
+          `<div class="muted" style="font-size:12px;margin-top:4px">потрібно 30 днів історії</div>`);
     const portTiles = `<div class="tiles" style="margin:0 0 12px;padding:0">
       ${this._tile("Вкладено (грн-екв.)", fmtUAH(s0.invested_uah))}
       ${this._tile("Номінал (грн-екв.)", fmtUAH(s0.nominal_uah_eq))}
-      ${yieldTile("Дохідність ₴", py.UAH)}
-      ${py.USD != null ? yieldTile("Дохідність $", py.USD) : ""}
-      ${py.EUR != null ? yieldTile("Дохідність €", py.EUR) : ""}
+      ${Object.entries(py).map(([c, v]) => this._tile(`Дохідність ${curSym(c)}`, pct(v),
+        `<div class="muted" style="font-size:12px;margin-top:4px">очікувана</div>`)).join("")}
+      ${xirrTiles}
     </div>`;
     main.innerHTML = `
       ${portTiles}
@@ -971,9 +977,10 @@ class OddInvestPanel extends HTMLElement {
     ];
     if (anyTarget) series.push({ name: "План (накопич.)", color: "var(--warning-color, #ffa600)", values: plan, dash: true });
     const x = (this._summary || {}).xirr || {};
-    const xirrLine = x.UAH != null
-      ? `Фактична дохідність (XIRR): <b>${x.UAH.toFixed(2)}%</b>`
-      : `Фактична дохідність з'явиться, коли набереться 30 днів історії`;
+    const xp = Object.entries(x).filter(([, v]) => v != null).map(([c, v]) => `${curSym(c)} ${v.toFixed(2)}%`);
+    const xirrLine = xp.length
+      ? `Фактична дохідність (XIRR): <b>${xp.join(" · ")}</b> — деталі у «Портфелі»`
+      : `Фактична дохідність (XIRR) з'явиться, коли набереться 30 днів історії`;
     return `<div class="card"><h2>Як росте</h2>${this._chartSVG(dates, series)}
       <div class="muted" style="margin-top:8px;font-size:13px">«План (накопич.)» — цільовий темп вкладень наростаючим підсумком (місячна ціль ÷ дні місяця). Факт вище пунктиру = випереджаєш план, нижче = відстаєш.</div>
       <div class="muted" style="margin-top:8px;font-size:13px;border-top:1px solid var(--divider-color);padding-top:8px">${xirrLine}</div></div>`;
