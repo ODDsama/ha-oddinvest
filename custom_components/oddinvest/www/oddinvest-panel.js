@@ -1087,7 +1087,6 @@ class OddInvestPanel extends HTMLElement {
           <label>Цільова частка EUR, %<input name="eur_target_share_pct" inputmode="decimal" value="${esc(s.eur_target_share_pct || "")}"></label>
           <label>Цільова дюрація, років<input name="target_duration_years" inputmode="decimal" placeholder="напр. 3" value="${esc(s.target_duration_years || "")}"></label>
           <label>Канали купівлі (через кому)<input name="channels" placeholder="mono, inzhur" value="${esc(s.channels || "")}"></label>
-          <label>Макс. строк погашення, років<input name="max_maturity_years" inputmode="decimal" placeholder="напр. 4 (0 = без межі)" value="${esc(s.max_maturity_years || "")}"></label>
           <label>Що рекомендувати<select name="reinvest_rank">
             ${[["plan","Під мій план (валюта → драбина → дюрація)"],["rate","Найвища ставка"],
                ["short","Найкоротші до погашення"],["ladder","Заповнювати дірки в драбині"]]
@@ -1108,7 +1107,6 @@ class OddInvestPanel extends HTMLElement {
           eur_target_share_pct: f.eur_target_share_pct.value.trim(),
           target_duration_years: f.target_duration_years.value.trim(),
           channels: f.channels.value.trim(),
-          max_maturity_years: f.max_maturity_years.value.trim(),
           reinvest_rank: f.reinvest_rank.value,
           goal_amount_uah: f.goal_amount_uah.value.trim(),
           goal_date: f.goal_date.value.trim(),
