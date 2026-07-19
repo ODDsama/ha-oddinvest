@@ -264,7 +264,8 @@ class OddInvestPanel extends HTMLElement {
       const val = (x) => v.sortKey === "rate_pct" ? parseFloat(x.rate_pct)
         : v.sortKey === "nominal" ? Number(x.nominal && x.nominal.amount)
           : v.sortKey === "affordable" ? Number(x.affordable)
-            : String(x.maturity);
+            : v.sortKey === "duration_after" ? Number(x.duration_after || 0)
+              : String(x.maturity);
       a = a.slice().sort((p, q) => { const pv = val(p), qv = val(q); return (pv < qv ? -1 : pv > qv ? 1 : 0) * v.sortDir; });
     }
     return a;
@@ -289,12 +290,15 @@ class OddInvestPanel extends HTMLElement {
         <th class="sort" data-sort="maturity">Погашення${arrow("maturity")}</th>
         <th class="num sort" data-sort="nominal">Номінал${arrow("nominal")}</th>
         <th class="num sort" data-sort="affordable">Вистачає${arrow("affordable")}</th>
+        <th class="num sort" data-sort="duration_after">Дюрація${arrow("duration_after")}</th>
         <th>Чому</th><th></th></tr></thead><tbody>
         ${paged.length ? paged.map((x) => `<tr>
           <td>${esc(x.isin)}</td><td class="num">${x.rate_pct}%</td><td>${esc(x.maturity)}</td>
-          <td class="num">${fmtMoney(x.nominal)}</td><td class="num">${x.affordable}</td><td>${esc(x.reason)}</td>
+          <td class="num">${fmtMoney(x.nominal)}</td><td class="num">${x.affordable}</td>
+          <td class="num">${x.duration_after ? `${Number(x.duration_now).toFixed(2)} → <b>${Number(x.duration_after).toFixed(2)}</b>` : "—"}</td>
+          <td>${esc(x.reason)}</td>
           <td class="row-actions"><button class="sm" data-take="${esc(x.isin)}">Взяти</button></td></tr>`).join("")
-        : `<tr><td colspan="7" class="muted">Нічого не знайдено за фільтром.</td></tr>`}
+        : `<tr><td colspan="8" class="muted">Нічого не знайдено за фільтром.</td></tr>`}
       </tbody></table>
       <div class="rv-pager">
         <span class="muted">${total} ${total === 1 ? "папір" : "паперів"}</span>
@@ -703,12 +707,24 @@ class OddInvestPanel extends HTMLElement {
         <td class="num" style="color:${col}">${sgn(x.change_pct)}${x.change_pct}%</td>
         <td class="num" style="color:${col}">${sgn(x.change_uah)}${fmtUAH(x.change_uah)}</td></tr>`;
     }).join("");
+    const st = (this._summary && this._summary.settings) || {};
+    const tgt = Number(st.target_duration_years || 0);
+    let tgtHint = "";
+    if (tgt > 0) {
+      const d = rr.duration_years - tgt;
+      tgtHint = Math.abs(d) < 0.15
+        ? `<div style="margin-bottom:10px;color:var(--success-color,#43a047)">Дюрація на цілі: ${rr.duration_years} ≈ ${tgt} р. ✅</div>`
+        : `<div style="margin-bottom:10px">Зараз <b>${rr.duration_years}</b> → ціль <b>${tgt}</b> р. —
+           щоб зійтись, бери <b>${d < 0 ? "довші" : "коротші"}</b> папери.</div>`;
+    }
     return `<div class="card"><h2>Ризик ставок</h2>
       <div class="tiles" style="margin:0 0 10px">
         <div class="tile"><div class="lbl">Дюрація (Маколея)</div><div class="val">${rr.duration_years} р.</div></div>
+        <div class="tile"><div class="lbl">Цільова дюрація</div><div class="val">${tgt > 0 ? tgt + " р." : "—"}</div></div>
         <div class="tile"><div class="lbl">Модифікована</div><div class="val">${rr.modified_dur}</div></div>
         <div class="tile"><div class="lbl">Приведена вартість</div><div class="val">${fmtUAH(rr.pv_uah)}</div></div>
       </div>
+      ${tgtHint}
       <table><thead><tr><th>Зміна ставок</th><th class="num">Вартість</th><th class="num">У грошах</th></tr></thead>
         <tbody>${scen}</tbody></table>
       <div class="muted" style="margin-top:8px;font-size:13px">Дюрація — середньозважений строк повернення грошей.
@@ -880,6 +896,7 @@ class OddInvestPanel extends HTMLElement {
           <label>Ціль на місяць, ₴<input name="monthly_target_uah" inputmode="decimal" value="${esc(s.monthly_target_uah || "")}"></label>
           <label>Цільова частка USD, %<input name="usd_target_share_pct" inputmode="decimal" value="${esc(s.usd_target_share_pct || "")}"></label>
           <label>Цільова частка EUR, %<input name="eur_target_share_pct" inputmode="decimal" value="${esc(s.eur_target_share_pct || "")}"></label>
+          <label>Цільова дюрація, років<input name="target_duration_years" inputmode="decimal" placeholder="напр. 3" value="${esc(s.target_duration_years || "")}"></label>
           <label>Ціль: сума, ₴<input name="goal_amount_uah" inputmode="decimal" value="${esc(s.goal_amount_uah || "")}"></label>
           <label>Ціль: дата<input name="goal_date" type="date" value="${esc(s.goal_date || "")}"></label>
           <button type="submit">Зберегти</button>
@@ -893,6 +910,7 @@ class OddInvestPanel extends HTMLElement {
           monthly_target_uah: f.monthly_target_uah.value.trim(),
           usd_target_share_pct: f.usd_target_share_pct.value.trim(),
           eur_target_share_pct: f.eur_target_share_pct.value.trim(),
+          target_duration_years: f.target_duration_years.value.trim(),
           goal_amount_uah: f.goal_amount_uah.value.trim(),
           goal_date: f.goal_date.value.trim(),
         });
