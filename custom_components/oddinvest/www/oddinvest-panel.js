@@ -414,6 +414,21 @@ class OddInvestPanel extends HTMLElement {
   }
 
   // ---------- ПОРТФЕЛЬ ----------
+  // Канали: задані в Налаштуваннях ∪ ті, що вже зустрічались у лотах.
+  // Так новий канал доступний ще до першої покупки, а старі не губляться.
+  _channelList(lots) {
+    const st = (this._summary || {}).settings || {};
+    const set = new Set(String(st.channels || "").split(",").map((c) => c.trim()).filter(Boolean));
+    (lots || []).forEach((l) => { if (l.channel) set.add(String(l.channel).trim()); });
+    return [...set].sort((a, b) => a.localeCompare(b, "uk"));
+  }
+
+  _channelOptions(lots) {
+    return `<option value="">—</option>` +
+      this._channelList(lots).map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("") +
+      `<option value="__other__">інший…</option>`;
+  }
+
   async _renderPortfolio(main) {
     const s0 = this._summary || {};
     const [positions, lots, sales, reinvest] = await Promise.all([
@@ -465,7 +480,8 @@ class OddInvestPanel extends HTMLElement {
             <option value="EUR">EUR</option>
           </select></label>
           <label>Дата купівлі<input name="buy_date" type="date" value="${today()}" required></label>
-          <label>Канал<input name="channel" placeholder="Дія…"></label>
+          <label>Канал<select name="channel_sel">${this._channelOptions(lots)}</select>
+            <input name="channel" placeholder="назва каналу" style="margin-top:6px;display:none"></label>
           <label>Нотатка<input name="note"></label>
           <button type="submit">Додати</button>
         </form>
@@ -587,15 +603,29 @@ class OddInvestPanel extends HTMLElement {
       } catch (_) { if (info) info.textContent = ""; }
     });
 
+    // «інший…» відкриває поле для нової назви каналу
+    const chSel = main.querySelector('[name="channel_sel"]');
+    const chIn = main.querySelector('[name="channel"]');
+    if (chSel && chIn) {
+      chSel.addEventListener("change", () => {
+        const other = chSel.value === "__other__";
+        chIn.style.display = other ? "" : "none";
+        if (other) { chIn.value = ""; chIn.focus(); }
+      });
+    }
+
     main.querySelector("#lotForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const f = e.target;
+      const channel = f.channel_sel.value === "__other__"
+        ? f.channel.value.trim()
+        : f.channel_sel.value.trim();
       try {
         await this._api("POST", "lots", {
           isin: f.isin.value.trim(), qty: parseInt(f.qty.value, 10),
           price_per_bond: f.price_per_bond.value.trim(), fee: f.fee.value.trim(),
           currency: f.currency.value.trim(), buy_date: f.buy_date.value,
-          channel: f.channel.value.trim(), note: f.note.value.trim(),
+          channel: channel, note: f.note.value.trim(),
         });
         this._toast("Лот додано"); this._loadTab();
       } catch (err) { this._toast(String(err.message || err), false); }
@@ -1017,6 +1047,7 @@ class OddInvestPanel extends HTMLElement {
           <label>Цільова частка USD, %<input name="usd_target_share_pct" inputmode="decimal" value="${esc(s.usd_target_share_pct || "")}"></label>
           <label>Цільова частка EUR, %<input name="eur_target_share_pct" inputmode="decimal" value="${esc(s.eur_target_share_pct || "")}"></label>
           <label>Цільова дюрація, років<input name="target_duration_years" inputmode="decimal" placeholder="напр. 3" value="${esc(s.target_duration_years || "")}"></label>
+          <label>Канали купівлі (через кому)<input name="channels" placeholder="mono, inzhur" value="${esc(s.channels || "")}"></label>
           <label>Ціль: сума, ₴<input name="goal_amount_uah" inputmode="decimal" value="${esc(s.goal_amount_uah || "")}"></label>
           <label>Ціль: дата<input name="goal_date" type="date" value="${esc(s.goal_date || "")}"></label>
           <button type="submit">Зберегти</button>
@@ -1031,6 +1062,7 @@ class OddInvestPanel extends HTMLElement {
           usd_target_share_pct: f.usd_target_share_pct.value.trim(),
           eur_target_share_pct: f.eur_target_share_pct.value.trim(),
           target_duration_years: f.target_duration_years.value.trim(),
+          channels: f.channels.value.trim(),
           goal_amount_uah: f.goal_amount_uah.value.trim(),
           goal_date: f.goal_date.value.trim(),
         });
