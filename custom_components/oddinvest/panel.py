@@ -17,7 +17,7 @@ from http import HTTPStatus
 import aiohttp
 from aiohttp import web
 
-from homeassistant.components import panel_custom
+from homeassistant.components import frontend, panel_custom
 from homeassistant.components.http import HomeAssistantView, StaticPathConfig
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
@@ -94,9 +94,22 @@ class OddInvestProxyView(HomeAssistantView):
 
 
 async def async_setup_panel(hass: HomeAssistant) -> None:
-    """Один раз на процес HA: в'юшка-проксі, статика JS, ресурс, панель."""
-    if hass.data.get(_SETUP_FLAG):
-        return
+    """В'юшка-проксі, статика JS і панель.
+
+    Cache-bust прив'язаний до mtime файла, а не до часу старту HA: інакше
+    оновлений JS лишався за старою адресою, браузер віддавав закешований
+    модуль, і зміни не з'являлись навіть після Ctrl+Shift+R. Тепер новий
+    файл = нова адреса, тож досить перезавантажити інтеграцію.
+    """
+    js_file = pathlib.Path(__file__).parent / "www" / "oddinvest-panel.js"
+    try:
+        version = int(js_file.stat().st_mtime)
+    except OSError:
+        version = int(time.time())
+    module_url = f"{JS_URL}?v={version}"
+
+    if hass.data.get(_SETUP_FLAG) == module_url:
+        return  # той самий файл — перереєстрація нічого не змінить
 
     # view і статику реєструємо толерантно — щоб повторна спроба після
     # невдачі не падала на «вже зареєстровано».
@@ -105,7 +118,6 @@ async def async_setup_panel(hass: HomeAssistant) -> None:
     except Exception:  # noqa: BLE001
         _LOGGER.debug("proxy view вже зареєстрована")
 
-    js_file = pathlib.Path(__file__).parent / "www" / "oddinvest-panel.js"
     try:
         await hass.http.async_register_static_paths(
             [StaticPathConfig(JS_URL, str(js_file), False)]
@@ -113,8 +125,13 @@ async def async_setup_panel(hass: HomeAssistant) -> None:
     except Exception:  # noqa: BLE001
         _LOGGER.debug("static path вже зареєстрований")
 
-    # cache-bust: нова адреса модуля на кожен старт HA
-    module_url = f"{JS_URL}?v={int(time.time())}"
+    # Панель уже могла бути зареєстрована зі старою адресою — знімаємо,
+    # інакше async_register_panel впаде на дублікаті.
+    if hass.data.get(_SETUP_FLAG):
+        try:
+            frontend.async_remove_panel(hass, PANEL_URL_PATH)
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("панель не була зареєстрована")
 
     await panel_custom.async_register_panel(
         hass,
@@ -126,5 +143,5 @@ async def async_setup_panel(hass: HomeAssistant) -> None:
         require_admin=False,
         config={},
     )
-    hass.data[_SETUP_FLAG] = True
-    _LOGGER.info("Панель ODD Invest зареєстрована (/%s)", PANEL_URL_PATH)
+    hass.data[_SETUP_FLAG] = module_url
+    _LOGGER.info("Панель ODD Invest зареєстрована (/%s, v=%s)", PANEL_URL_PATH, version)
