@@ -212,9 +212,19 @@ class OddInvestPanel extends HTMLElement {
   // що робити: почати, купити або накопичувати далі.
   _actionBannerHTML() {
     const s = this._summary || {};
-    const acc = s.accounts || {}, rmin = s.reinvest_min || {};
+    const rmin = s.reinvest_min || {};
     const hasPortfolio = (s.nominal_uah_eq || 0) > 0;
-    const ready = Object.keys(rmin).filter((c) => rmin[c] > 0 && (acc[c] || 0) >= rmin[c]);
+    // Готовність рахуємо ПО БРОКЕРАХ: сумарний баланс може «вистачати»,
+    // хоча в кожного окремо грошей замало — і банер брехав би.
+    const brokers = s.brokers || {};
+    const ready = [];
+    for (const b of Object.keys(brokers)) {
+      for (const c of Object.keys(brokers[b] || {})) {
+        if (rmin[c] > 0 && brokers[b][c] >= rmin[c]) {
+          ready.push({ broker: b, cur: c, n: Math.floor(brokers[b][c] / rmin[c]) });
+        }
+      }
+    }
     const box = (cls, icon, title, sub, btn = "") =>
       `<div class="banner ${cls}"><div class="b-ic">${icon}</div><div class="b-tx">
          <div class="b-t">${title}</div>${sub ? `<div class="b-s">${sub}</div>` : ""}</div>${btn}</div>`;
@@ -225,9 +235,9 @@ class OddInvestPanel extends HTMLElement {
         `<button data-go="buy">Купити папір</button>`);
     }
     if (ready.length) {
-      const parts = ready.map((c) => `<b>${Math.floor(acc[c] / rmin[c])}</b> ${esc(c)}-папер(и)`).join(", ");
+      const parts = ready.map((r) => `<b>${r.n}</b> ${esc(r.cur)}-папер(и) у <b>${esc(r.broker)}</b>`).join(", ");
       return box("ok", "●", `Можеш купити ${parts}`,
-        ready.map((c) => `${esc(c)}: на рахунку ${fmtCur(acc[c], c)}, папір від ${fmtCur(rmin[c], c)}`).join(" · "),
+        ready.map((r) => `${esc(r.broker)} · ${esc(r.cur)}: ${fmtCur(brokers[r.broker][r.cur], r.cur)}, папір від ${fmtCur(rmin[r.cur], r.cur)}`).join(" · "),
         `<button data-go="buy">Купити</button>`);
     }
     const need = Math.max(0, (s.reinvest_min_uah || 0) - (s.account_uah || 0));
@@ -355,18 +365,28 @@ class OddInvestPanel extends HTMLElement {
   }
 
   // ---------- ПОРТФЕЛЬ ----------
-  // Канали: задані в Налаштуваннях ∪ ті, що вже зустрічались у лотах.
-  // Так новий канал доступний ще до першої покупки, а старі не губляться.
-  _channelList(lots) {
-    const st = (this._summary || {}).settings || {};
-    const set = new Set(String(st.channels || "").split(",").map((c) => c.trim()).filter(Boolean));
+  // Брокери: задані в Налаштуваннях ∪ ті, що вже зустрічались у лотах і
+  // балансах. Новий брокер доступний ще до першої покупки, старі не губляться.
+  _brokerList(lots) {
+    const s = this._summary || {};
+    const set = new Set(String((s.settings || {}).channels || "")
+      .split(",").map((c) => c.trim()).filter(Boolean));
+    Object.keys(s.brokers || {}).forEach((b) => { if (b && b !== "—") set.add(b); });
     (lots || []).forEach((l) => { if (l.channel) set.add(String(l.channel).trim()); });
     return [...set].sort((a, b) => a.localeCompare(b, "uk"));
   }
 
+  // Для форм грошей: без «інший…», бо рахунок має існувати заздалегідь.
+  _brokerOptions(sel = "") {
+    const list = this._brokerList();
+    return `<option value="">—</option>` + list.map((c) =>
+      `<option value="${esc(c)}"${c === sel ? " selected" : ""}>${esc(c)}</option>`).join("");
+  }
+
+  // Для форми покупки: плюс «інший…» на разовий випадок.
   _channelOptions(lots) {
     return `<option value="">—</option>` +
-      this._channelList(lots).map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("") +
+      this._brokerList(lots).map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("") +
       `<option value="__other__">інший…</option>`;
   }
 
@@ -411,7 +431,7 @@ class OddInvestPanel extends HTMLElement {
             <option value="EUR">EUR</option>
           </select></label>
           <label>Дата купівлі<input name="buy_date" type="date" value="${today()}" required></label>
-          <label>Канал<select name="channel_sel">${this._channelOptions(lots)}</select>
+          <label>Брокер<select name="channel_sel">${this._channelOptions(lots)}</select>
             <input name="channel" placeholder="назва каналу" style="margin-top:6px;display:none"></label>
           <label>Нотатка<input name="note"></label>
           <button type="submit">Додати</button>
@@ -435,7 +455,7 @@ class OddInvestPanel extends HTMLElement {
         <h2>Лоти</h2>
         ${lots.length ? `<table><thead><tr>
           <th>ID</th><th>ISIN</th><th class="num">К-сть</th><th class="num">Залишок</th><th class="num">Ціна</th>
-          <th class="num">Комісія</th><th>Куплено</th><th>Канал</th><th></th></tr></thead><tbody>
+          <th class="num">Комісія</th><th>Куплено</th><th>Брокер</th><th></th></tr></thead><tbody>
           ${lots.map((l) => `<tr>
             <td>${l.id}</td><td>${esc(l.isin)}</td><td class="num">${l.qty}</td><td class="num">${l.remaining}</td>
             <td class="num">${fmtMoney(l.price_per_bond)}</td><td class="num">${fmtMoney(l.fee)}</td>
@@ -564,6 +584,33 @@ class OddInvestPanel extends HTMLElement {
   }
 
   // ---------- РАХУНОК ----------
+  // Баланси по брокерах: гроші в одного не купують папір в іншого, тож
+  // «вистачає / не вистачає» має сенс лише в розрізі рахунку.
+  _brokerBalancesHTML() {
+    const s = this._summary || {};
+    const brokers = s.brokers || {};
+    const names = Object.keys(brokers).sort((a, b) => a.localeCompare(b, "uk"));
+    if (!names.length) return "";
+    const rmin = s.reinvest_min || {};
+    const sym = { UAH: "₴", USD: "$", EUR: "€" };
+    const rows = names.map((b) => {
+      const cur = brokers[b] || {};
+      const parts = Object.keys(cur).sort().map((c) => {
+        const v = cur[c], min = rmin[c] || 0;
+        const enough = min > 0 && v >= min;
+        const hint = min > 0
+          ? (enough ? `вистачає на ${Math.floor(v / min)}` : `до паперу ще ${fmtCur(min - v, sym[c] || c)}`)
+          : "";
+        return `<div class="pv-row"><span>${esc(c)} · <b>${fmtCur(v, sym[c] || c)}</b></span>
+          <span class="${enough ? "" : "muted"}" style="${enough ? "color:var(--success-color,#43a047)" : ""}">${hint}</span></div>`;
+      }).join("");
+      return `<div style="margin-bottom:14px"><div style="margin-bottom:4px"><b>${esc(b)}</b></div>${parts}</div>`;
+    }).join("");
+    return `<div class="card"><h2>Рахунки по брокерах</h2>
+      <div class="muted" style="margin-bottom:10px">Гроші в одного брокера не купують папір в іншого — тому баланси роздільні.</div>
+      ${rows}</div>`;
+  }
+
   async _renderAccount(main) {
     const [deposits, conversions] = await Promise.all([
       this._api("GET", "deposits").catch(() => []),
@@ -589,12 +636,15 @@ class OddInvestPanel extends HTMLElement {
         </div>
       </div>
 
+      ${this._brokerBalancesHTML()}
+
       <div class="card">
         <h2>Додати рух</h2>
         <div class="muted" style="margin-bottom:10px">Поповнення (+) / зняття (−) у своїй валюті. Купівля лота й купони рухають рахунок автоматично.</div>
         <form id="depForm">
           <label>Сума (+ / −)<input name="amount" inputmode="decimal" placeholder="5000.00" required></label>
           <label>Валюта<select name="currency">${curOpts("UAH")}</select></label>
+          <label>Брокер<select name="broker">${this._brokerOptions()}</select></label>
           <label>Дата<input name="date" type="date" value="${today()}"></label>
           <label>Нотатка<input name="note"></label>
           <button type="submit">Записати</button>
@@ -609,6 +659,7 @@ class OddInvestPanel extends HTMLElement {
           <label>Валюта<select name="from_currency">${curOpts("UAH")}</select></label>
           <label>Отримав<input name="to_amount" inputmode="decimal" placeholder="1000.00" required></label>
           <label>Валюта<select name="to_currency">${curOpts("USD")}</select></label>
+          <label>Брокер<select name="broker">${this._brokerOptions()}</select></label>
           <label>Дата<input name="date" type="date" value="${today()}"></label>
           <label>Нотатка<input name="note"></label>
           <button type="submit">Записати</button>
@@ -639,7 +690,8 @@ class OddInvestPanel extends HTMLElement {
       const f = e.target;
       try {
         await this._api("POST", "deposits", {
-          amount: f.amount.value.trim(), currency: f.currency.value, date: f.date.value, note: f.note.value.trim(),
+          amount: f.amount.value.trim(), currency: f.currency.value, broker: f.broker.value,
+          date: f.date.value, note: f.note.value.trim(),
         });
         this._toast("Рух записано"); this._loadTab();
       } catch (err) { this._toast(String(err.message || err), false); }
@@ -651,7 +703,7 @@ class OddInvestPanel extends HTMLElement {
         await this._api("POST", "conversions", {
           from_amount: f.from_amount.value.trim(), from_currency: f.from_currency.value,
           to_amount: f.to_amount.value.trim(), to_currency: f.to_currency.value,
-          date: f.date.value, note: f.note.value.trim(),
+          broker: f.broker.value, date: f.date.value, note: f.note.value.trim(),
         });
         this._toast("Конвертацію записано"); this._loadTab();
       } catch (err) { this._toast(String(err.message || err), false); }
@@ -953,7 +1005,7 @@ class OddInvestPanel extends HTMLElement {
           <label>Цільова частка USD, %<input name="usd_target_share_pct" inputmode="decimal" value="${esc(s.usd_target_share_pct || "")}"></label>
           <label>Цільова частка EUR, %<input name="eur_target_share_pct" inputmode="decimal" value="${esc(s.eur_target_share_pct || "")}"></label>
           <label>Цільова дюрація, років<input name="target_duration_years" inputmode="decimal" placeholder="напр. 3" value="${esc(s.target_duration_years || "")}"></label>
-          <label>Канали купівлі (через кому)<input name="channels" placeholder="mono, inzhur" value="${esc(s.channels || "")}"></label>
+          <label>Брокери (через кому)<input name="channels" placeholder="mono, inzhur" value="${esc(s.channels || "")}"></label>
           <label>Ціль: песимістична, ₴<input name="goal_pessimistic_uah" inputmode="decimal" placeholder="мінімум" value="${esc(s.goal_pessimistic_uah || "")}"></label>
           <label>Ціль: реалістична, ₴<input name="goal_realistic_uah" inputmode="decimal" placeholder="порожньо = прогноз на дедлайн" value="${esc(s.goal_realistic_uah || "")}"></label>
           <label>Ціль: оптимістична, ₴<input name="goal_optimistic_uah" inputmode="decimal" placeholder="мрія" value="${esc(s.goal_optimistic_uah || "")}"></label>
