@@ -1020,7 +1020,6 @@ class OddInvestPanel extends HTMLElement {
           <label>Цільова частка USD, %<input name="usd_target_share_pct" inputmode="decimal" value="${esc(s.usd_target_share_pct || "")}"></label>
           <label>Цільова частка EUR, %<input name="eur_target_share_pct" inputmode="decimal" value="${esc(s.eur_target_share_pct || "")}"></label>
           <label>Цільова дюрація, років<input name="target_duration_years" inputmode="decimal" placeholder="напр. 3" value="${esc(s.target_duration_years || "")}"></label>
-          <label>Брокери (через кому)<input name="channels" placeholder="mono, inzhur" value="${esc(s.channels || "")}"></label>
           <label>Ціль: песимістична, ₴<input name="goal_pessimistic_uah" inputmode="decimal" placeholder="мінімум" value="${esc(s.goal_pessimistic_uah || "")}"></label>
           <label>Ціль: реалістична, ₴<input name="goal_realistic_uah" inputmode="decimal" placeholder="порожньо = прогноз на дедлайн" value="${esc(s.goal_realistic_uah || "")}"></label>
           <label>Ціль: оптимістична, ₴<input name="goal_optimistic_uah" inputmode="decimal" placeholder="мрія" value="${esc(s.goal_optimistic_uah || "")}"></label>
@@ -1028,6 +1027,8 @@ class OddInvestPanel extends HTMLElement {
           <button type="submit">Зберегти</button>
         </form>
       </div>
+
+      ${this._brokerManagerHTML(s)}
 
       <div class="card">
         <h2>Бекап</h2>
@@ -1041,6 +1042,7 @@ class OddInvestPanel extends HTMLElement {
         <div class="muted" id="restoreMsg" style="margin-top:8px;font-size:13px"></div>
       </div>`;
     this._bindBackup(main);
+    this._bindBrokers(main);
     main.querySelector("#setForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const f = e.target;
@@ -1055,10 +1057,65 @@ class OddInvestPanel extends HTMLElement {
           goal_realistic_uah: f.goal_realistic_uah.value.trim(),
           goal_optimistic_uah: f.goal_optimistic_uah.value.trim(),
           goal_date: f.goal_date.value.trim(),
+          // channels НЕ чіпаємо — брокерами керує окрема картка
         });
         this._toast("Налаштування збережено"); this._loadTab();
       } catch (err) { this._toast(String(err.message || err), false); }
     });
+  }
+
+  // Брокери — окремий керований список. Зберігаємо в тому ж налаштуванні
+  // channels (через кому), але UI — повноцінний CRUD. Видалення прибирає
+  // брокера лише зі списку-підказки: наявні лоти й баланси його не
+  // втрачають (там брокер зберігається на кожному записі окремо).
+  _parseBrokers(s) {
+    return String((s || {}).channels || "").split(",").map((x) => x.trim()).filter(Boolean);
+  }
+
+  _brokerManagerHTML(s) {
+    const list = this._parseBrokers(s);
+    const rows = list.length
+      ? list.map((b) => `<div class="pv-row"><span><b>${esc(b)}</b></span>
+          <button class="sm warn" data-delbroker="${esc(b)}">✕</button></div>`).join("")
+      : `<div class="muted" style="font-size:13px">Ще немає брокерів. Додай mono, inzhur…</div>`;
+    return `<div class="card" id="brokerCard">
+      <h2>Брокери</h2>
+      <div class="muted" style="margin-bottom:10px">Рахунки для купівлі ОВДП. Зʼявляються у випадайках форм грошей і покупки.</div>
+      ${rows}
+      <form id="brokerAddForm" style="margin-top:10px;display:flex;gap:8px">
+        <input name="broker" placeholder="назва брокера" style="flex:0 0 200px" autocomplete="off">
+        <button type="submit">Додати</button>
+      </form></div>`;
+  }
+
+  async _saveBrokers(list) {
+    const uniq = [...new Set(list.map((x) => x.trim()).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, "uk"));
+    await this._api("PUT", "settings", { channels: uniq.join(", ") });
+    this._loadTab();
+  }
+
+  _bindBrokers(main) {
+    const card = main.querySelector("#brokerCard");
+    if (!card) return;
+    // джерело правди — те, що на екрані, а не можливо застарілий this._summary
+    const shown = () => [...card.querySelectorAll("[data-delbroker]")].map((b) => b.dataset.delbroker);
+    card.querySelector("#brokerAddForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const name = e.target.broker.value.trim();
+      if (!name) return;
+      if (shown().some((b) => b.toLowerCase() === name.toLowerCase())) {
+        this._toast("Такий брокер уже є", false);
+        return;
+      }
+      try { await this._saveBrokers([...shown(), name]); this._toast("Брокера додано"); }
+      catch (err) { this._toast(String(err.message || err), false); }
+    });
+    card.querySelectorAll("[data-delbroker]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        try { await this._saveBrokers(shown().filter((x) => x !== b.dataset.delbroker)); this._toast("Брокера прибрано"); }
+        catch (err) { this._toast(String(err.message || err), false); }
+      }));
   }
 
   _bindBackup(main) {
