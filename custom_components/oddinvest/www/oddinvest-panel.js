@@ -306,6 +306,40 @@ class OddInvestPanel extends HTMLElement {
       <div class="muted" style="font-size:12px;margin-top:8px">Повний календар — у «Майбутньому»</div></div>`;
   }
 
+  // Кільце часток вкладеного капіталу по брокерах. Малюємо SVG-donut
+  // руками (без зовнішніх бібліотек): кожен сегмент — коло зі stroke-
+  // dasharray, зсунуте на суму попередніх. Група повернута на -90°, щоб
+  // старт був угорі.
+  _brokerDonutHTML() {
+    const ibb = (this._summary || {}).invested_by_broker || {};
+    const names = Object.keys(ibb).filter((n) => ibb[n] > 0).sort((a, b) => ibb[b] - ibb[a]);
+    if (names.length < 2) return "";
+    const total = names.reduce((s, n) => s + ibb[n], 0);
+    const palette = ["#4da3ff", "#2ecc71", "#ffa600", "#8e24aa", "#f85149", "#26c6da", "#d4a5ff"];
+    const R = 60, W = 22, C = 2 * Math.PI * R;
+    let acc = 0;
+    const arcs = names.map((n, i) => {
+      const len = (ibb[n] / total) * C;
+      const c = `<circle cx="80" cy="80" r="${R}" fill="none" stroke="${palette[i % palette.length]}"
+        stroke-width="${W}" stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}"
+        stroke-dashoffset="${(-acc).toFixed(2)}"/>`;
+      acc += len;
+      return c;
+    }).join("");
+    const legend = names.map((n, i) => {
+      const pct = (ibb[n] / total) * 100;
+      return `<div class="pv-row"><span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;
+        background:${palette[i % palette.length]};margin-right:8px;vertical-align:-1px"></span>${esc(n)}</span>
+        <span>${pct.toFixed(0)}% · ${fmtUAH(ibb[n])}</span></div>`;
+    }).join("");
+    return `<div class="card"><h2>Частки по брокерах</h2>
+      <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+        <svg viewBox="0 0 160 160" width="150" height="150" style="transform:rotate(-90deg);flex:0 0 auto">${arcs}</svg>
+        <div style="flex:1;min-width:200px">${legend}</div>
+      </div>
+      <div class="muted" style="font-size:12px;margin-top:8px">За вкладеним капіталом (вартість входу залишків).</div></div>`;
+  }
+
   _nbuStaleHTML() {
     const at = (this._summary || {}).nbu_refreshed_at;
     if (!at) return "";
@@ -343,6 +377,7 @@ class OddInvestPanel extends HTMLElement {
       </div>
       ${tiles}
       ${this._goalsHTML()}
+      ${this._brokerDonutHTML()}
       <div class="ov-grid">${chart}${this._paymentsPreviewHTML()}</div>
       ${this._snapshotsTableHTML()}`;
 
