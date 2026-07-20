@@ -266,9 +266,10 @@ class OddInvestPanel extends HTMLElement {
       }
       const miss = g.before_deadline === false && g.required_monthly > 0
         ? `<div class="muted" style="font-size:12px;margin-top:2px">пізніше дедлайну — щоб устигнути, треба ${fmtUAH(g.required_monthly)}/міс</div>` : "";
+      const auto = g.auto ? ` <span class="muted" style="font-size:12px">(прогноз на дедлайн)</span>` : "";
       return `<div style="margin-bottom:12px">
         <div style="display:flex;justify-content:space-between;align-items:baseline">
-          <span>${esc(g.label)} · <b>${fmtUAH(g.amount)}</b></span>
+          <span>${esc(g.label)} · <b>${fmtUAH(g.amount)}</b>${auto}</span>
           <span style="font-size:13px;color:${color}">${when}</span>
         </div>
         <div class="progress" style="margin-top:6px"><span style="width:${pct}%"></span></div>
@@ -940,7 +941,7 @@ class OddInvestPanel extends HTMLElement {
           <label>Цільова дюрація, років<input name="target_duration_years" inputmode="decimal" placeholder="напр. 3" value="${esc(s.target_duration_years || "")}"></label>
           <label>Канали купівлі (через кому)<input name="channels" placeholder="mono, inzhur" value="${esc(s.channels || "")}"></label>
           <label>Ціль: песимістична, ₴<input name="goal_pessimistic_uah" inputmode="decimal" placeholder="мінімум" value="${esc(s.goal_pessimistic_uah || "")}"></label>
-          <label>Ціль: реалістична, ₴<input name="goal_realistic_uah" inputmode="decimal" placeholder="план" value="${esc(s.goal_realistic_uah || s.goal_amount_uah || "")}"></label>
+          <label>Ціль: реалістична, ₴<input name="goal_realistic_uah" inputmode="decimal" placeholder="порожньо = прогноз на дедлайн" value="${esc(s.goal_realistic_uah || "")}"></label>
           <label>Ціль: оптимістична, ₴<input name="goal_optimistic_uah" inputmode="decimal" placeholder="мрія" value="${esc(s.goal_optimistic_uah || "")}"></label>
           <label>Дедлайн (необовʼязково)<input name="goal_date" type="date" value="${esc(s.goal_date || "")}"></label>
           <button type="submit">Зберегти</button>
