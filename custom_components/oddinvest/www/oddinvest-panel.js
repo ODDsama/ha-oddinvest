@@ -266,6 +266,11 @@ class OddInvestPanel extends HTMLElement {
       }
       const miss = g.before_deadline === false && g.required_monthly > 0
         ? `<div class="muted" style="font-size:12px;margin-top:2px">пізніше дедлайну — щоб устигнути, треба ${fmtUAH(g.required_monthly)}/міс</div>` : "";
+      const fact = g.months_actual
+        ? `<div class="muted" style="font-size:12px;margin-top:2px">за фактичним темпом: ${
+            g.months_actual === -1 ? "вже досягнуто"
+            : g.months_actual === 0 ? "не досягається"
+            : `${esc(String(g.date_actual).slice(0, 7))} · через ${(g.months_actual / 12).toFixed(1)} р.`}</div>` : "";
       const auto = g.auto ? ` <span class="muted" style="font-size:12px">(прогноз на дедлайн)</span>` : "";
       return `<div style="margin-bottom:12px">
         <div style="display:flex;justify-content:space-between;align-items:baseline">
@@ -274,7 +279,7 @@ class OddInvestPanel extends HTMLElement {
         </div>
         <div class="progress" style="margin-top:6px"><span style="width:${pct}%"></span></div>
         <div class="muted" style="font-size:12px;margin-top:2px">накопичено ${pct.toFixed(1)}%</div>
-        ${miss}</div>`;
+        ${fact}${miss}</div>`;
     }).join("");
     const dl = s.settings && s.settings.goal_date
       ? `<div class="muted" style="font-size:12px">Дедлайн: ${esc(String(s.settings.goal_date).slice(0, 7))}</div>` : "";
@@ -913,16 +918,25 @@ class OddInvestPanel extends HTMLElement {
     const rate = s.projection_rate_pct || 0;
     const rateSrc = rate > 0 ? `за портфелем ${rate.toFixed(1)}% (сер. купон)` : "додай папери — і дохідність порахується сама";
 
+    const hasActual = (s.actual_monthly_uah || 0) > 0;
     const rows = rowsData.length ? rowsData.map((r) =>
       `<tr><td>${r.years} р.</td><td class="num">${fmtUAH(r.contributed)}</td>
-        <td class="num">${fmtUAH(r.with_reinvest)}</td><td class="num">${fmtUAH(r.with_reinvest - r.contributed)}</td></tr>`).join("")
-      : `<tr><td colspan="4" class="muted">Додай папери й ціль на місяць, щоб побачити проєкцію.</td></tr>`;
+        <td class="num">${fmtUAH(r.with_reinvest)}</td>
+        ${hasActual ? `<td class="num">${fmtUAH(r.with_reinvest_actual || 0)}</td>` : ""}
+        <td class="num">${fmtUAH(r.with_reinvest - r.contributed)}</td></tr>`).join("")
+      : `<tr><td colspan="${hasActual ? 5 : 4}" class="muted">Додай папери й ціль на місяць, щоб побачити проєкцію.</td></tr>`;
+    const paceNote = hasActual
+      ? `<div class="muted" style="margin-bottom:10px;font-size:13px">Фактичний темп поповнень: <b>${fmtUAH(s.actual_monthly_uah)}/міс</b> за ${s.actual_months} міс історії (план — ${fmtUAH(C)}/міс).</div>`
+      : `<div class="muted" style="margin-bottom:10px;font-size:13px">Прогноз за фактичним темпом зʼявиться, коли назбирається 60 днів історії поповнень.</div>`;
 
     return `
       <div class="card">
         <h2>Проєкції капіталу</h2>
         <div class="muted" style="margin-bottom:10px">Старт = капітал ${fmtUAH(P0)}, внесок = ${fmtUAH(C)}/міс, ставка = ${rateSrc}. Модель: реальні купони й погашення наявних паперів + внески, реінвест під ставку; готівка не працює до реінвесту. Це припущення, не гарантія.</div>
-        <table><thead><tr><th>Горизонт</th><th class="num">Внесено (без %)</th><th class="num">З реінвестом</th><th class="num">Приріст</th></tr></thead>
+        ${paceNote}
+        <table><thead><tr><th>Горизонт</th><th class="num">Внесено (без %)</th>
+          <th class="num">За планом</th>${hasActual ? `<th class="num">За фактом</th>` : ""}
+          <th class="num">Приріст</th></tr></thead>
           <tbody>${rows}</tbody></table>
       </div>
       ${this._goalsHTML()}`;
