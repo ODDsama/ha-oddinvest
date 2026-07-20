@@ -1012,7 +1012,20 @@ class OddInvestPanel extends HTMLElement {
           <label>Дедлайн (необовʼязково)<input name="goal_date" type="date" value="${esc(s.goal_date || "")}"></label>
           <button type="submit">Зберегти</button>
         </form>
+      </div>
+
+      <div class="card">
+        <h2>Бекап</h2>
+        <div class="muted" style="margin-bottom:10px">Твої лоти, поповнення, конвертації, налаштування й статуси виплат.
+          Довідник НБУ не входить — він відновлюється сам. Плюс сервер щодня пише копію поряд із БД (потрапляє в бекап Proxmox).</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button type="button" id="btnExport">Завантажити бекап</button>
+          <label style="display:inline-block"><span class="muted" style="font-size:13px">Відновити з файлу:</span>
+            <input type="file" id="importFile" accept="application/json,.json" style="margin-top:6px"></label>
+        </div>
+        <div class="muted" id="restoreMsg" style="margin-top:8px;font-size:13px"></div>
       </div>`;
+    this._bindBackup(main);
     main.querySelector("#setForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const f = e.target;
@@ -1030,6 +1043,49 @@ class OddInvestPanel extends HTMLElement {
         });
         this._toast("Налаштування збережено"); this._loadTab();
       } catch (err) { this._toast(String(err.message || err), false); }
+    });
+  }
+
+  _bindBackup(main) {
+    // Експорт: тягнемо через проксі (з HA-авторизацією) і зберігаємо як файл.
+    main.querySelector("#btnExport").addEventListener("click", async () => {
+      try {
+        const resp = await this._hass.fetchWithAuth("/api/oddinvest/backup");
+        if (!resp.ok) throw new Error(await resp.text());
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "oddinvest-backup-" + today() + ".json";
+        a.click();
+        URL.revokeObjectURL(url);
+        this._toast("Бекап завантажено");
+      } catch (err) { this._toast(String(err.message || err), false); }
+    });
+
+    // Імпорт: читаємо файл, підтверджуємо (замінює ВСЕ), відновлюємо.
+    main.querySelector("#importFile").addEventListener("change", async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const msg = main.querySelector("#restoreMsg");
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        const n = (data.lots || []).length;
+        if (!confirm(`Відновити з бекапу? Це ЗАМІНИТЬ усі поточні дані (${n} лот(ів) у файлі). Дію не скасувати.`)) {
+          e.target.value = "";
+          return;
+        }
+        const res = await this._api("POST", "restore", data);
+        const r = res.restored || {};
+        msg.textContent = `Відновлено: ${r.lots || 0} лот(ів), ${r.deposits || 0} поповн., ${r.conversions || 0} конверт., ${r.snapshots || 0} знімк.`;
+        this._toast("Відновлено з бекапу");
+        this._loadTab();
+      } catch (err) {
+        msg.textContent = "Помилка: " + String(err.message || err);
+        this._toast("Не вдалось відновити", false);
+      }
+      e.target.value = "";
     });
   }
 }
