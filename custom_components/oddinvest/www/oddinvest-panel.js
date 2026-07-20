@@ -30,8 +30,6 @@ class OddInvestPanel extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._tab = "overview";
     this._inited = false;
-    this._reinvestAll = [];
-    this._rv = { cur: "", year: "", minRate: "", q: "", sortKey: "", sortDir: -1, page: 1, pageSize: 10 };
   }
 
   set hass(hass) {
@@ -119,13 +117,6 @@ class OddInvestPanel extends HTMLElement {
         .pill.reinv { background:var(--success-color,#43a047); color:#fff; }
         .pill.recv { background:var(--info-color,#039be5); color:#fff; }
         .row-actions { display:flex; gap:6px; }
-        .rv-controls { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
-        .rv-controls input, .rv-controls select { padding:6px 8px; font-size:13px; }
-        .rv-controls input { max-width:150px; }
-        th.sort { cursor:pointer; user-select:none; white-space:nowrap; }
-        th.sort:hover { color:var(--primary-color); }
-        .rv-pager { display:flex; align-items:center; gap:8px; margin-top:10px; flex-wrap:wrap; }
-        .rv-pager .sp { flex:1; }
         .suggest { position:absolute; top:100%; left:0; right:0; z-index:6; margin-top:2px;
                    background:var(--card-background-color); border:1px solid var(--divider-color);
                    border-radius:8px; max-height:240px; overflow:auto; display:none;
@@ -237,7 +228,7 @@ class OddInvestPanel extends HTMLElement {
       const parts = ready.map((c) => `<b>${Math.floor(acc[c] / rmin[c])}</b> ${esc(c)}-папер(и)`).join(", ");
       return box("ok", "●", `Можеш купити ${parts}`,
         ready.map((c) => `${esc(c)}: на рахунку ${fmtCur(acc[c], c)}, папір від ${fmtCur(rmin[c], c)}`).join(" · "),
-        `<button data-go="pick">Обрати папір</button>`);
+        `<button data-go="buy">Купити</button>`);
     }
     const need = Math.max(0, (s.reinvest_min_uah || 0) - (s.account_uah || 0));
     const np = s.next_payment;
@@ -282,17 +273,6 @@ class OddInvestPanel extends HTMLElement {
       <div class="muted" style="font-size:12px;margin-top:8px">Повний календар — у «Майбутньому»</div></div>`;
   }
 
-  // Топ-2 рекомендації — показуємо ЗАВЖДИ, навіть коли ще не по кишені:
-  // так видно, до чого накопичувати.
-  _recommendedHTML(rec) {
-    if (!rec || !rec.length) return "";
-    const rows = rec.slice(0, 2).map((x) => `<div class="pv-row">
-      <span><b>${esc(x.isin)}</b> <span class="muted">· ${fmtMoney(x.nominal)} · ${x.rate_pct}% · до ${esc(x.maturity)}</span></span>
-      <span class="${x.can_buy ? "" : "muted"}">${x.can_buy ? `вистачає на ${x.affordable}` : "ще не по кишені"}</span></div>`).join("");
-    return `<div class="card"><h2>Рекомендовано взяти</h2>${rows}
-      <div style="margin-top:10px"><button class="sm" data-go="pick">Весь список →</button></div></div>`;
-  }
-
   _nbuStaleHTML() {
     const at = (this._summary || {}).nbu_refreshed_at;
     if (!at) return "";
@@ -305,7 +285,6 @@ class OddInvestPanel extends HTMLElement {
 
   async _renderOverview(main) {
     const s = this._summary || {};
-    const rec = await this._api("GET", "reinvest").then((r) => r || []).catch(() => []);
     const cap = (s.nominal_uah_eq || 0) + (s.account_uah || 0);
     const np = s.next_payment;
     const accrued = s.accrued_uah || 0;
@@ -324,7 +303,6 @@ class OddInvestPanel extends HTMLElement {
     main.innerHTML = `
       ${this._nbuStaleHTML()}
       ${this._actionBannerHTML()}
-      ${this._recommendedHTML(rec)}
       <div class="quick">
         <button data-go="buy">Купівля</button>
         <button data-go="deposit">Поповнення</button>
@@ -341,106 +319,16 @@ class OddInvestPanel extends HTMLElement {
 
   // Швидкий перехід у потрібну форму з «Огляду».
   async _goto(what) {
-    const map = { buy: "portfolio", pick: "portfolio", deposit: "account", convert: "account" };
+    const map = { buy: "portfolio", deposit: "account", convert: "account" };
     this._tab = map[what] || "portfolio";
     await this._loadTab();
-    const sel = { buy: "#lotForm", pick: "#reinvestCard", deposit: "#depForm", convert: "#convForm" }[what];
+    const sel = { buy: "#lotForm", deposit: "#depForm", convert: "#convForm" }[what];
     const el = this.shadowRoot.querySelector(sel) || this.shadowRoot.querySelector("#lotForm");
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "center" });
       const first = el.querySelector && el.querySelector("input");
-      if (first && what !== "pick") first.focus();
+      if (first) first.focus();
     }
-  }
-
-  // ---------- ПОМІЧНИК РЕІНВЕСТИЦІЇ: фільтри / сортування / пагінація ----------
-  _rvOptions(kind, allLabel) {
-    const set = new Set();
-    for (const x of this._reinvestAll) {
-      set.add(kind === "cur" ? x.currency : String(x.maturity).slice(0, 4));
-    }
-    const vals = [...set].filter(Boolean).sort();
-    const sel = kind === "cur" ? this._rv.cur : this._rv.year;
-    return `<option value="">${allLabel}</option>` +
-      vals.map((v) => `<option value="${esc(v)}"${sel === v ? " selected" : ""}>${esc(v)}</option>`).join("");
-  }
-
-  _rvFilteredSorted() {
-    const v = this._rv;
-    let a = this._reinvestAll.filter((x) =>
-      (!v.cur || x.currency === v.cur) &&
-      (v.minRate === "" || parseFloat(x.rate_pct) >= parseFloat(v.minRate)) &&
-      (!v.year || String(x.maturity).startsWith(v.year)) &&
-      (!v.q || String(x.isin).toLowerCase().includes(v.q.toLowerCase())));
-    if (v.sortKey) {
-      const val = (x) => v.sortKey === "rate_pct" ? parseFloat(x.rate_pct)
-        : v.sortKey === "nominal" ? Number(x.nominal && x.nominal.amount)
-          : v.sortKey === "affordable" ? Number(x.affordable)
-            : v.sortKey === "duration_after" ? Number(x.duration_after || 0)
-              : String(x.maturity);
-      a = a.slice().sort((p, q) => { const pv = val(p), qv = val(q); return (pv < qv ? -1 : pv > qv ? 1 : 0) * v.sortDir; });
-    }
-    return a;
-  }
-
-  _rvRender(root) {
-    const box = root.querySelector("#rvTable");
-    if (!box) return;
-    const v = this._rv;
-    const rows = this._rvFilteredSorted();
-    const total = rows.length;
-    const size = v.pageSize === "all" ? (total || 1) : v.pageSize;
-    const pages = Math.max(1, Math.ceil(total / size));
-    if (v.page > pages) v.page = pages;
-    const start = (v.page - 1) * size;
-    const paged = v.pageSize === "all" ? rows : rows.slice(start, start + size);
-    const arrow = (k) => v.sortKey === k ? (v.sortDir === 1 ? " ▲" : " ▼") : "";
-    box.innerHTML = `
-      <table><thead><tr>
-        <th>ISIN</th>
-        <th class="num sort" data-sort="rate_pct">Ставка${arrow("rate_pct")}</th>
-        <th class="sort" data-sort="maturity">Погашення${arrow("maturity")}</th>
-        <th class="num sort" data-sort="nominal">Номінал${arrow("nominal")}</th>
-        <th class="num sort" data-sort="affordable">Вистачає${arrow("affordable")}</th>
-        <th class="num sort" data-sort="duration_after">Дюрація${arrow("duration_after")}</th>
-        <th>Чому</th><th></th></tr></thead><tbody>
-        ${paged.length ? paged.map((x) => `<tr>
-          <td>${esc(x.isin)}</td><td class="num">${x.rate_pct}%</td><td>${esc(x.maturity)}</td>
-          <td class="num">${fmtMoney(x.nominal)}</td><td class="num">${x.affordable}</td>
-          <td class="num">${x.duration_after ? `${Number(x.duration_now).toFixed(2)} → <b>${Number(x.duration_after).toFixed(2)}</b>` : "—"}</td>
-          <td>${esc(x.reason)}</td>
-          <td class="row-actions"><button class="sm" data-take="${esc(x.isin)}">Взяти</button></td></tr>`).join("")
-        : `<tr><td colspan="8" class="muted">Нічого не знайдено за фільтром.</td></tr>`}
-      </tbody></table>
-      <div class="rv-pager">
-        <span class="muted">${total} ${total === 1 ? "папір" : "паперів"}</span>
-        <span class="sp"></span>
-        <button class="sm ghost" data-pg="prev"${v.page <= 1 ? " disabled" : ""}>‹ Назад</button>
-        <span class="muted">${v.page} / ${pages}</span>
-        <button class="sm ghost" data-pg="next"${v.page >= pages ? " disabled" : ""}>Далі ›</button>
-      </div>`;
-
-    box.querySelectorAll("[data-sort]").forEach((th) =>
-      th.addEventListener("click", () => {
-        const k = th.dataset.sort;
-        if (v.sortKey === k) v.sortDir *= -1;
-        else { v.sortKey = k; v.sortDir = k === "maturity" ? 1 : -1; }
-        this._rvRender(root);
-      }));
-    box.querySelectorAll("[data-pg]").forEach((b) =>
-      b.addEventListener("click", () => {
-        if (b.dataset.pg === "prev" && v.page > 1) v.page--;
-        if (b.dataset.pg === "next") v.page++;
-        this._rvRender(root);
-      }));
-    box.querySelectorAll("[data-take]").forEach((b) =>
-      b.addEventListener("click", () => {
-        const f = root.querySelector("#lotForm");
-        f.isin.value = b.dataset.take;
-        f.isin.dispatchEvent(new Event("change"));
-        f.scrollIntoView({ behavior: "smooth", block: "center" });
-        f.qty.focus();
-      }));
   }
 
   // ---------- ПОРТФЕЛЬ ----------
@@ -465,10 +353,7 @@ class OddInvestPanel extends HTMLElement {
       this._api("GET", "positions"),
       this._api("GET", "lots"),
       this._api("GET", "sales"),
-      this._api("GET", "reinvest").then((r) => r || []).catch(() => []),
     ]);
-    this._reinvestAll = reinvest;
-    this._rv.page = 1;
     // «Дохідність» — очікуване наперед (сер. купон), «XIRR» — фактично
     // реалізоване. Тримаємо поруч, бо сенс саме в порівнянні.
     const py = s0.portfolio_yield || {}, xr = s0.xirr || {};
@@ -488,21 +373,6 @@ class OddInvestPanel extends HTMLElement {
     </div>`;
     main.innerHTML = `
       ${portTiles}
-      ${reinvest.length ? `<div class="card" id="reinvestCard">
-        <h2>Помічник реінвестиції</h2>
-        <div class="muted" style="margin-bottom:10px">Доступні папери під твій план: валюта, яку треба добрати → рік з «діркою» в драбині → ставка. «Дохідність» = купонна ставка (ОВДП біля номіналу). Обери й тисни «Взяти».</div>
-        <div class="rv-controls">
-          <select data-f="cur">${this._rvOptions("cur", "Валюта: всі")}</select>
-          <select data-f="year">${this._rvOptions("year", "Рік: всі")}</select>
-          <input data-f="minRate" inputmode="decimal" placeholder="Ставка ≥, %" value="${esc(this._rv.minRate)}">
-          <input data-f="q" placeholder="Пошук ISIN" value="${esc(this._rv.q)}">
-          <select data-f="pageSize">
-            ${[10, 25, 50].map((n) => `<option value="${n}"${this._rv.pageSize === n ? " selected" : ""}>${n}/стор.</option>`).join("")}
-            <option value="all"${this._rv.pageSize === "all" ? " selected" : ""}>усі</option>
-          </select>
-        </div>
-        <div id="rvTable"></div>
-      </div>` : ""}
       <div class="card">
         <h2>Нова покупка</h2>
         <form id="lotForm">
@@ -582,21 +452,6 @@ class OddInvestPanel extends HTMLElement {
         try { await this._api("DELETE", "lots/" + b.dataset.del); this._toast("Лот видалено"); this._loadTab(); }
         catch (err) { this._toast(String(err.message || err), false); }
       }));
-
-    const rvCard = main.querySelector("#reinvestCard");
-    if (rvCard) {
-      rvCard.querySelectorAll("[data-f]").forEach((el) => {
-        const ev = el.tagName === "SELECT" ? "change" : "input";
-        el.addEventListener(ev, () => {
-          const f = el.dataset.f;
-          this._rv[f] = f === "pageSize" ? (el.value === "all" ? "all" : parseInt(el.value, 10)) : el.value;
-          this._rv.page = 1;
-          this._rvRender(main);
-        });
-      });
-      this._rvRender(main);
-    }
-
 
     const isinInput = main.querySelector('input[name="isin"]');
     const sug = main.querySelector("#bondSuggest");
@@ -1087,11 +942,6 @@ class OddInvestPanel extends HTMLElement {
           <label>Цільова частка EUR, %<input name="eur_target_share_pct" inputmode="decimal" value="${esc(s.eur_target_share_pct || "")}"></label>
           <label>Цільова дюрація, років<input name="target_duration_years" inputmode="decimal" placeholder="напр. 3" value="${esc(s.target_duration_years || "")}"></label>
           <label>Канали купівлі (через кому)<input name="channels" placeholder="mono, inzhur" value="${esc(s.channels || "")}"></label>
-          <label>Що рекомендувати<select name="reinvest_rank">
-            ${[["plan","Під мій план (валюта → драбина → дюрація)"],["rate","Найвища ставка"],
-               ["short","Найкоротші до погашення"],["ladder","Заповнювати дірки в драбині"]]
-              .map(([v,t]) => `<option value="${v}"${(s.reinvest_rank||"plan")===v?" selected":""}>${t}</option>`).join("")}
-          </select></label>
           <label>Ціль: сума, ₴<input name="goal_amount_uah" inputmode="decimal" value="${esc(s.goal_amount_uah || "")}"></label>
           <label>Ціль: дата<input name="goal_date" type="date" value="${esc(s.goal_date || "")}"></label>
           <button type="submit">Зберегти</button>
@@ -1107,7 +957,6 @@ class OddInvestPanel extends HTMLElement {
           eur_target_share_pct: f.eur_target_share_pct.value.trim(),
           target_duration_years: f.target_duration_years.value.trim(),
           channels: f.channels.value.trim(),
-          reinvest_rank: f.reinvest_rank.value,
           goal_amount_uah: f.goal_amount_uah.value.trim(),
           goal_date: f.goal_date.value.trim(),
         });
