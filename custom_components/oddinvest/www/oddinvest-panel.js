@@ -390,6 +390,20 @@ class OddInvestPanel extends HTMLElement {
       `<option value="__other__">інший…</option>`;
   }
 
+  // Довідково: скільки вкладено в папери по кожному брокеру (грн-екв.).
+  _investedByBrokerHTML() {
+    const ibb = (this._summary || {}).invested_by_broker || {};
+    const names = Object.keys(ibb).sort((a, b) => ibb[b] - ibb[a]);
+    if (names.length < 2) return ""; // при одному брокері розбивка = тій самій плитці
+    const total = names.reduce((s, n) => s + ibb[n], 0);
+    const rows = names.map((n) => {
+      const pct = total > 0 ? (ibb[n] / total) * 100 : 0;
+      return `<div class="pv-row"><span><b>${esc(n)}</b></span>
+        <span>${fmtUAH(ibb[n])} <span class="muted" style="font-size:12px">(${pct.toFixed(0)}%)</span></span></div>`;
+    }).join("");
+    return `<div class="card"><h2>Вкладено по брокерах</h2>${rows}</div>`;
+  }
+
   async _renderPortfolio(main) {
     const s0 = this._summary || {};
     const [positions, lots, sales, reinvest] = await Promise.all([
@@ -413,7 +427,8 @@ class OddInvestPanel extends HTMLElement {
       ${Object.entries(py).map(([c, v]) => this._tile(`Дохідність ${curSym(c)}`, pct(v),
         `<div class="muted" style="font-size:12px;margin-top:4px">очікувана</div>`)).join("")}
       ${xirrTiles}
-    </div>`;
+    </div>
+    ${this._investedByBrokerHTML()}`;
     main.innerHTML = `
       ${portTiles}
       <div class="card">
