@@ -22,6 +22,17 @@ const fmtMoney = (m) =>
   m ? `${Number(m.amount).toLocaleString("uk-UA", { minimumFractionDigits: 2 })} ${m.currency}` : "—";
 const curSym = (c) => ({ UAH: "₴", USD: "$", EUR: "€" }[c] || c);
 
+// --- пояснення «як це читати» для кожного графіка ---
+const INFO = {
+  broker: ["Частки по брокерах", "Кільце показує, яка частка вкладеного капіталу лежить у кожного брокера. Розмір сегмента = частка, у легенді — точний % і сума. Рахується за вартістю входу залишків (без готівки)."],
+  growth: ["Як росте", "Фактична історія портфеля по днях: скільки вкладено, номінал паперів, гроші на рахунку, і пунктиром — цільовий темп вкладень. Факт вище пунктиру = випереджаєш план. Крива будується, коли є ≥2 добові знімки."],
+  ladder: ["Драбина погашень", "Кожен стовпчик — скільки номіналу повертається того року (у грн-екв). Рівномірні стовпчики означають, що гроші рознесені в часі; один високий — усе гаситься одного року. Порожні роки («діри») варто заповнювати новими паперами. Наведи на стовпчик — точна сума."],
+  income: ["Дохід по місяцях", "Скільки купонів і погашень надійде кожного місяця на рік наперед (грн-екв). Це твій потік для реінвесту — видно, коли назбирається на наступний папір. Порожній місяць = виплат немає."],
+  currency: ["Валюта: факт vs ціль", "Синій стовпчик — поточна частка валюти в портфелі, сірий — твоя цільова частка з Налаштувань. Синій нижчий за сірий → валюту треба добирати; вищий → уже перебір."],
+  capital: ["Крива капіталу", "Проєкція капіталу на 1/3/5/10 років. Сіра лінія — просто сума внесків без відсотків, синя — з реінвестом під дохідність портфеля. Розрив між ними — це робота складного відсотка. Модель — припущення, не гарантія."],
+};
+const infoBtn = (k) => `<button class="info" data-info="${k}" aria-label="Як це читати" title="Як це читати">i</button>`;
+
 // --- маленькі SVG-графіки без бібліотек (sp-DOM, тож малюємо руками) ---
 const compactUAH = (v) => { const a = Math.abs(v);
   return a >= 1e6 ? (v / 1e6).toFixed(1).replace(".", ",") + "М" : a >= 1e3 ? Math.round(v / 1e3) + "к" : String(Math.round(v)); };
@@ -192,10 +203,24 @@ class OddInvestPanel extends HTMLElement {
                   border-bottom:1px solid var(--divider-color); }
         .pv-row:last-of-type { border-bottom:none; }
         .chart-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; margin-bottom:16px; }
-        .chart-grid .card h4 { margin:0 0 8px; font-size:14px; }
-        .lg { display:flex; gap:14px; flex-wrap:wrap; margin-top:6px; font-size:12px; color:var(--secondary-text-color); }
-        .lg span { display:inline-flex; align-items:center; gap:5px; }
-        .lg i { width:11px; height:11px; border-radius:2px; display:inline-block; }
+        .chart-grid .card h4 { margin:0 0 8px; font-size:14px; display:flex; align-items:center; justify-content:space-between; }
+        .lg { display:flex; gap:18px; flex-wrap:wrap; margin-top:8px; font-size:14px; color:var(--primary-text-color); }
+        .lg span { display:inline-flex; align-items:center; gap:7px; }
+        .lg i { width:14px; height:14px; border-radius:3px; display:inline-block; }
+        .h-row { display:flex; align-items:center; }
+        .info { width:20px; height:20px; border-radius:50%; border:1px solid var(--divider-color); background:none;
+                color:var(--secondary-text-color); font:italic 600 12px Georgia, serif; cursor:pointer; flex:0 0 auto;
+                line-height:1; padding:0; margin-left:8px; }
+        .info:hover { border-color:var(--primary-color); color:var(--primary-color); }
+        .infopop { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center;
+                   justify-content:center; z-index:50; padding:20px; }
+        .infopop.show { display:flex; }
+        .infopop .box { background:var(--card-background-color); border:1px solid var(--divider-color);
+                        border-radius:12px; padding:20px 22px; max-width:460px; }
+        .infopop h4 { margin:0 0 10px; font-size:16px; }
+        .infopop p { margin:0; color:var(--primary-text-color); line-height:1.6; font-size:14px; }
+        .infopop .x { float:right; background:none; border:none; color:var(--secondary-text-color); font-size:20px;
+                      cursor:pointer; margin:-6px -6px 0 0; }
         .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(80px);
                  padding:12px 20px; border-radius:10px; color:#fff; opacity:0; transition:.25s; z-index:9; max-width:80vw; }
         .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
@@ -210,10 +235,22 @@ class OddInvestPanel extends HTMLElement {
       <nav>${TABS.map(([k, t]) => `<a data-tab="${k}">${t}</a>`).join("")}</nav>
       <main id="main"></main>
       <div id="toast" class="toast"></div>
+      <div class="infopop" id="infoPop"><div class="box"></div></div>
     `;
     this.shadowRoot.querySelectorAll("nav a").forEach((a) =>
       a.addEventListener("click", () => { this._tab = a.dataset.tab; this._loadTab(); })
     );
+    // попапи «як це читати» — делеговано на весь shadow root
+    this.shadowRoot.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-info]");
+      const pop = this.shadowRoot.getElementById("infoPop");
+      if (b) {
+        const en = INFO[b.dataset.info];
+        if (en) { pop.querySelector(".box").innerHTML = `<button class="x" data-closeinfo>×</button><h4>${en[0]}</h4><p>${en[1]}</p>`; pop.classList.add("show"); }
+      } else if (e.target.closest("[data-closeinfo]") || e.target.id === "infoPop") {
+        pop.classList.remove("show");
+      }
+    });
     this.shadowRoot.getElementById("refresh").addEventListener("click", async (e) => {
       e.target.disabled = true;
       try { await this._api("POST", "refresh"); this._toast("Довідник НБУ оновлено"); this._loadTab(); }
@@ -377,7 +414,7 @@ class OddInvestPanel extends HTMLElement {
         background:${palette[i % palette.length]};margin-right:8px;vertical-align:-1px"></span>${esc(n)}</span>
         <span>${pct.toFixed(0)}% · ${fmtUAH(ibb[n])}</span></div>`;
     }).join("");
-    return `<div class="card"><h2>Частки по брокерах</h2>
+    return `<div class="card"><h2 class="h-row">Частки по брокерах ${infoBtn("broker")}</h2>
       <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
         <svg viewBox="0 0 160 160" width="150" height="150" style="transform:rotate(-90deg);flex:0 0 auto">${arcs}</svg>
         <div style="flex:1;min-width:200px">${legend}</div>
@@ -390,15 +427,15 @@ class OddInvestPanel extends HTMLElement {
     let html = "";
     const lad = s.ladder_uah || [];
     if (lad.length) {
-      html += `<div class="card"><h4>Драбина погашень</h4>
+      html += `<div class="card"><h4>Драбина погашень ${infoBtn("ladder")}</h4>
         ${svgBars(lad.map((r) => ({ label: String(r.year), value: r.uah })), { showVals: true })}
-        <div class="muted" style="font-size:12px">Номінал, що повертається щороку (грн-екв.).</div></div>`;
+        <div class="muted" style="font-size:13px">Номінал, що повертається щороку (грн-екв.).</div></div>`;
     }
     const inc = s.income_12m || [];
     if (inc.some((m) => m.amount > 0)) {
-      html += `<div class="card"><h4>Дохід по місяцях</h4>
+      html += `<div class="card"><h4>Дохід по місяцях ${infoBtn("income")}</h4>
         ${svgBars(inc.map((m) => ({ label: m.month.slice(5), value: m.amount, color: "#2ecc71" })))}
-        <div class="muted" style="font-size:12px">Купони + погашення на рік наперед (грн-екв.).</div></div>`;
+        <div class="muted" style="font-size:13px">Купони + погашення на рік наперед (грн-екв.).</div></div>`;
     }
     const st = s.settings || {};
     const usdT = Number(st.usd_target_share_pct || 0), eurT = Number(st.eur_target_share_pct || 0);
@@ -408,12 +445,12 @@ class OddInvestPanel extends HTMLElement {
         { label: "USD", a: s.usd_share_pct || 0, b: usdT },
         { label: "EUR", a: s.eur_share_pct || 0, b: eurT },
       ];
-      html += `<div class="card"><h4>Валюта: факт vs ціль</h4>${svgGrouped(groups)}
+      html += `<div class="card"><h4>Валюта: факт vs ціль ${infoBtn("currency")}</h4>${svgGrouped(groups)}
         <div class="lg"><span><i style="background:#4da3ff"></i>факт</span><span><i style="background:#8b949e"></i>ціль</span></div></div>`;
     }
     const proj = s.projection || [];
     if (proj.length) {
-      html += `<div class="card"><h4>Крива капіталу</h4>
+      html += `<div class="card"><h4>Крива капіталу ${infoBtn("capital")}</h4>
         ${svgLine(proj.map((p) => p.years + "р"), [
           { color: "#8b949e", values: proj.map((p) => p.contributed) },
           { color: "#4da3ff", values: proj.map((p) => p.with_reinvest) },
@@ -1049,7 +1086,7 @@ class OddInvestPanel extends HTMLElement {
     const snaps = (all || []).slice(i);
     this._snapsCache = snaps;
     if (snaps.length < 2) {
-      return `<div class="card"><h2>Як росте</h2>
+      return `<div class="card"><h2 class="h-row">Як росте ${infoBtn("growth")}</h2>
         <div class="muted">Крива будується з добових знімків (пишуться щодня о 06:10,
         або одразу після «↻ Оновити НБУ»). Потрібно ≥2 знімки з даними — наразі ${snaps.length}.
         Порожні знімки до появи портфеля не рахуються.</div></div>`;
@@ -1077,7 +1114,7 @@ class OddInvestPanel extends HTMLElement {
     const xirrLine = xp.length
       ? `Фактична дохідність (XIRR): <b>${xp.join(" · ")}</b> — деталі у «Портфелі»`
       : `Фактична дохідність (XIRR) з'явиться, коли набереться 30 днів історії`;
-    return `<div class="card"><h2>Як росте</h2>${this._chartSVG(dates, series)}
+    return `<div class="card"><h2 class="h-row">Як росте ${infoBtn("growth")}</h2>${this._chartSVG(dates, series)}
       <div class="muted" style="margin-top:8px;font-size:13px">«План (накопич.)» — цільовий темп вкладень наростаючим підсумком (місячна ціль ÷ дні місяця). Факт вище пунктиру = випереджаєш план, нижче = відстаєш.</div>
       <div class="muted" style="margin-top:8px;font-size:13px;border-top:1px solid var(--divider-color);padding-top:8px">${xirrLine}</div></div>`;
   }
