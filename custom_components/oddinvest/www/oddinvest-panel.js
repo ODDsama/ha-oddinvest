@@ -242,25 +242,42 @@ class OddInvestPanel extends HTMLElement {
     return box("wait", "○", `Купувати ще рано — бракує ${fmtUAH(need)}${eta}`, sub);
   }
 
-  _goalStripHTML() {
+  // Три цілі з датою досягнення за поточним темпом. Дата — результат
+  // симуляції, тож вона рухається разом із реальним темпом накопичення.
+  _goalsHTML() {
     const s = this._summary || {};
-    const st = s.settings || {};
-    if (!st.goal_amount_uah || !s.goal_months_left) return "";
+    const goals = s.goals || [];
+    if (!goals.length) {
+      return `<div class="card"><h2>Цілі</h2><div class="muted">Задай суми цілей
+        (песимістична / реалістична / оптимістична) у «Налаштуваннях» — і тут зʼявиться,
+        коли кожна буде досягнута за твоїм темпом.</div></div>`;
+    }
     const cap = (s.nominal_uah_eq || 0) + (s.account_uah || 0);
-    const pct = Math.min(100, (cap / st.goal_amount_uah) * 100);
-    const proj = s.goal_projection || 0;
-    const ok = proj >= st.goal_amount_uah;
-    const verdict = ok
-      ? `<span style="color:var(--success-color,#43a047)">на шляху · прогноз ${fmtUAH(proj)}</span>`
-      : `<span style="color:var(--error-color,#db4437)">бракує ${fmtUAH(st.goal_amount_uah - proj)} · прогноз ${fmtUAH(proj)}</span>`;
-    return `<div class="card" style="padding:14px 18px">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
-        <span>Ціль ${fmtUAH(st.goal_amount_uah)} до ${esc(String(st.goal_date || "").slice(0, 7))}</span>
-        <span style="font-size:13px">${verdict}</span>
-      </div>
-      <div class="progress"><span style="width:${pct}%"></span></div>
-      <div class="muted" style="font-size:13px;margin-top:6px">Накопичено ${pct.toFixed(1)}% · лишилось ${s.goal_months_left} міс</div>
-    </div>`;
+    const rows = goals.map((g) => {
+      const pct = g.amount > 0 ? Math.min(100, (cap / g.amount) * 100) : 0;
+      let when, color = "var(--secondary-text-color)";
+      if (g.months === -1) { when = "вже досягнуто"; color = "var(--success-color,#43a047)"; }
+      else if (g.months === 0) { when = "не досягається за 60 років"; color = "var(--error-color,#db4437)"; }
+      else {
+        const yrs = (g.months / 12).toFixed(1);
+        when = `${esc(String(g.date).slice(0, 7))} · через ${yrs} р.`;
+        if (g.before_deadline === true) color = "var(--success-color,#43a047)";
+        else if (g.before_deadline === false) color = "var(--warning-color,#ffa600)";
+      }
+      const miss = g.before_deadline === false && g.required_monthly > 0
+        ? `<div class="muted" style="font-size:12px;margin-top:2px">пізніше дедлайну — щоб устигнути, треба ${fmtUAH(g.required_monthly)}/міс</div>` : "";
+      return `<div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <span>${esc(g.label)} · <b>${fmtUAH(g.amount)}</b></span>
+          <span style="font-size:13px;color:${color}">${when}</span>
+        </div>
+        <div class="progress" style="margin-top:6px"><span style="width:${pct}%"></span></div>
+        <div class="muted" style="font-size:12px;margin-top:2px">накопичено ${pct.toFixed(1)}%</div>
+        ${miss}</div>`;
+    }).join("");
+    const dl = s.settings && s.settings.goal_date
+      ? `<div class="muted" style="font-size:12px">Дедлайн: ${esc(String(s.settings.goal_date).slice(0, 7))}</div>` : "";
+    return `<div class="card"><h2>Цілі</h2>${rows}${dl}</div>`;
   }
 
   _paymentsPreviewHTML() {
@@ -309,7 +326,7 @@ class OddInvestPanel extends HTMLElement {
         <button data-go="convert">Конвертація</button>
       </div>
       ${tiles}
-      ${this._goalStripHTML()}
+      ${this._goalsHTML()}
       <div class="ov-grid">${chart}${this._paymentsPreviewHTML()}</div>
       ${this._snapshotsTableHTML()}`;
 
@@ -900,23 +917,6 @@ class OddInvestPanel extends HTMLElement {
         <td class="num">${fmtUAH(r.with_reinvest)}</td><td class="num">${fmtUAH(r.with_reinvest - r.contributed)}</td></tr>`).join("")
       : `<tr><td colspan="4" class="muted">Додай папери й ціль на місяць, щоб побачити проєкцію.</td></tr>`;
 
-    let goalHtml = `<div class="muted">Задай цільову суму й дату в «Налаштуваннях», щоб бачити трекер цілі.</div>`;
-    if (st.goal_amount_uah && st.goal_date && s.goal_months_left > 0) {
-      const proj = s.goal_projection || 0;
-      const diff = proj - st.goal_amount_uah;
-      const reqC = s.goal_required_monthly || 0;
-      const verdict = diff >= 0
-        ? `<span style="color:var(--success-color,#43a047)">на шляху ✅ (запас ${fmtUAH(diff)})</span>`
-        : `<span style="color:var(--error-color,#db4437)">бракує ${fmtUAH(-diff)}</span> — потрібно ≈ <b>${fmtUAH(Math.max(0, reqC))}</b>/міс (зараз ${fmtUAH(C)})`;
-      goalHtml = `<div class="tiles" style="margin:0 0 10px">
-          <div class="tile"><div class="lbl">Ціль</div><div class="val">${fmtUAH(st.goal_amount_uah)}</div></div>
-          <div class="tile"><div class="lbl">Дата</div><div class="val">${esc(st.goal_date)}</div></div>
-          <div class="tile"><div class="lbl">Місяців лишилось</div><div class="val">${s.goal_months_left}</div></div>
-          <div class="tile"><div class="lbl">Прогноз на дату</div><div class="val">${fmtUAH(proj)}</div></div>
-        </div>
-        <div>${verdict}</div>`;
-    }
-
     return `
       <div class="card">
         <h2>Проєкції капіталу</h2>
@@ -924,10 +924,7 @@ class OddInvestPanel extends HTMLElement {
         <table><thead><tr><th>Горизонт</th><th class="num">Внесено (без %)</th><th class="num">З реінвестом</th><th class="num">Приріст</th></tr></thead>
           <tbody>${rows}</tbody></table>
       </div>
-      <div class="card">
-        <h2>Ціль</h2>
-        ${goalHtml}
-      </div>`;
+      ${this._goalsHTML()}`;
   }
 
   // ---------- НАЛАШТУВАННЯ ----------
@@ -942,8 +939,10 @@ class OddInvestPanel extends HTMLElement {
           <label>Цільова частка EUR, %<input name="eur_target_share_pct" inputmode="decimal" value="${esc(s.eur_target_share_pct || "")}"></label>
           <label>Цільова дюрація, років<input name="target_duration_years" inputmode="decimal" placeholder="напр. 3" value="${esc(s.target_duration_years || "")}"></label>
           <label>Канали купівлі (через кому)<input name="channels" placeholder="mono, inzhur" value="${esc(s.channels || "")}"></label>
-          <label>Ціль: сума, ₴<input name="goal_amount_uah" inputmode="decimal" value="${esc(s.goal_amount_uah || "")}"></label>
-          <label>Ціль: дата<input name="goal_date" type="date" value="${esc(s.goal_date || "")}"></label>
+          <label>Ціль: песимістична, ₴<input name="goal_pessimistic_uah" inputmode="decimal" placeholder="мінімум" value="${esc(s.goal_pessimistic_uah || "")}"></label>
+          <label>Ціль: реалістична, ₴<input name="goal_realistic_uah" inputmode="decimal" placeholder="план" value="${esc(s.goal_realistic_uah || s.goal_amount_uah || "")}"></label>
+          <label>Ціль: оптимістична, ₴<input name="goal_optimistic_uah" inputmode="decimal" placeholder="мрія" value="${esc(s.goal_optimistic_uah || "")}"></label>
+          <label>Дедлайн (необовʼязково)<input name="goal_date" type="date" value="${esc(s.goal_date || "")}"></label>
           <button type="submit">Зберегти</button>
         </form>
       </div>`;
@@ -957,7 +956,9 @@ class OddInvestPanel extends HTMLElement {
           eur_target_share_pct: f.eur_target_share_pct.value.trim(),
           target_duration_years: f.target_duration_years.value.trim(),
           channels: f.channels.value.trim(),
-          goal_amount_uah: f.goal_amount_uah.value.trim(),
+          goal_pessimistic_uah: f.goal_pessimistic_uah.value.trim(),
+          goal_realistic_uah: f.goal_realistic_uah.value.trim(),
+          goal_optimistic_uah: f.goal_optimistic_uah.value.trim(),
           goal_date: f.goal_date.value.trim(),
         });
         this._toast("Налаштування збережено"); this._loadTab();
