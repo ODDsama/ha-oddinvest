@@ -202,7 +202,10 @@ class OddInvestPanel extends HTMLElement {
         .pv-row { display:flex; justify-content:space-between; font-size:14px; padding:7px 0;
                   border-bottom:1px solid var(--divider-color); }
         .pv-row:last-of-type { border-bottom:none; }
-        .chart-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; margin-bottom:16px; }
+        .chart-grid { display:flex; flex-wrap:wrap; gap:16px; margin-bottom:16px; align-items:stretch; }
+        .chart-grid > .card { flex:1 1 300px; min-width:0; }
+        .chart-grid > .card.wide { flex:2 1 420px; }
+        .ov-grid > .card { min-width:0; }
         .chart-grid .card h4 { margin:0 0 8px; font-size:14px; display:flex; align-items:center; justify-content:space-between; }
         .lg { display:flex; gap:18px; flex-wrap:wrap; margin-top:8px; font-size:14px; color:var(--primary-text-color); }
         .lg span { display:inline-flex; align-items:center; gap:7px; }
@@ -414,17 +417,17 @@ class OddInvestPanel extends HTMLElement {
         background:${palette[i % palette.length]};margin-right:8px;vertical-align:-1px"></span>${esc(n)}</span>
         <span>${pct.toFixed(0)}% · ${fmtUAH(ibb[n])}</span></div>`;
     }).join("");
-    return `<div class="card"><h2 class="h-row">Частки по брокерах ${infoBtn("broker")}</h2>
+    return `<div class="card wide"><h4 class="h-row" style="justify-content:space-between">Частки по брокерах ${infoBtn("broker")}</h4>
       <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
-        <svg viewBox="0 0 160 160" width="150" height="150" style="transform:rotate(-90deg);flex:0 0 auto">${arcs}</svg>
-        <div style="flex:1;min-width:200px">${legend}</div>
+        <svg viewBox="0 0 160 160" width="140" height="140" style="transform:rotate(-90deg);flex:0 0 auto">${arcs}</svg>
+        <div style="flex:1;min-width:180px">${legend}</div>
       </div>
       <div class="muted" style="font-size:12px;margin-top:8px">За вкладеним капіталом (вартість входу залишків).</div></div>`;
   }
 
   _extraChartsHTML() {
     const s = this._summary || {};
-    let html = "";
+    let html = this._brokerDonutHTML(); // донат тайлиться разом з рештою
     const lad = s.ladder_uah || [];
     if (lad.length) {
       html += `<div class="card"><h4>Драбина погашень ${infoBtn("ladder")}</h4>
@@ -497,9 +500,8 @@ class OddInvestPanel extends HTMLElement {
       </div>
       ${tiles}
       ${this._goalsHTML()}
-      ${this._brokerDonutHTML()}
-      ${this._extraChartsHTML()}
       <div class="ov-grid">${chart}${this._paymentsPreviewHTML()}</div>
+      ${this._extraChartsHTML()}
       ${this._snapshotsTableHTML()}`;
 
     main.querySelectorAll("[data-go]").forEach((b) =>
