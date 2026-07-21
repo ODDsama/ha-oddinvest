@@ -22,6 +22,42 @@ const fmtMoney = (m) =>
   m ? `${Number(m.amount).toLocaleString("uk-UA", { minimumFractionDigits: 2 })} ${m.currency}` : "—";
 const curSym = (c) => ({ UAH: "₴", USD: "$", EUR: "€" }[c] || c);
 
+// --- людські формати дат і строків ---
+const MON_NOM = ["січень", "лютий", "березень", "квітень", "травень", "червень",
+  "липень", "серпень", "вересень", "жовтень", "листопад", "грудень"];
+const MON_GEN = ["січня", "лютого", "березня", "квітня", "травня", "червня",
+  "липня", "серпня", "вересня", "жовтня", "листопада", "грудня"];
+
+// Українська множина: 1 рік / 2-4 роки / 5+ років (з винятком 11-14).
+function plural(n, one, few, many) {
+  const d = n % 10, h = n % 100;
+  if (d === 1 && h !== 11) return one;
+  if (d >= 2 && d <= 4 && (h < 10 || h >= 20)) return few;
+  return many;
+}
+// 32 -> «2 роки 8 місяців» (замість «2.6 р.»)
+function humanMonths(m) {
+  m = Math.max(0, Math.round(m));
+  const y = Math.floor(m / 12), mo = m % 12, parts = [];
+  if (y) parts.push(`${y} ${plural(y, "рік", "роки", "років")}`);
+  if (mo) parts.push(`${mo} ${plural(mo, "місяць", "місяці", "місяців")}`);
+  return parts.join(" ") || "менше місяця";
+}
+// «2029-02-19» -> «лютий 2029»
+function monthYear(iso) {
+  const p = String(iso || "").split("-");
+  if (p.length < 2) return String(iso || "");
+  return `${MON_NOM[+p[1] - 1] || p[1]} ${p[0]}`;
+}
+// «2026-07-22» -> «22 липня», а якщо не цьогоріч — «20 січня 2027»,
+// бо без року дата наступної виплати читається як «ось-ось».
+function dayMonth(iso) {
+  const p = String(iso || "").split("-");
+  if (p.length < 3) return monthYear(iso);
+  const d = `${+p[2]} ${MON_GEN[+p[1] - 1] || p[1]}`;
+  return p[0] === String(new Date().getFullYear()) ? d : `${d} ${p[0]}`;
+}
+
 // --- пояснення «як це читати» для кожного графіка ---
 const INFO = {
   broker: ["Частки по брокерах", "Кільце показує, яка частка вкладеного капіталу лежить у кожного брокера. Розмір сегмента = частка, у легенді — точний % і сума. Рахується за вартістю входу залишків (без готівки)."],
@@ -333,7 +369,7 @@ class OddInvestPanel extends HTMLElement {
     const days = perDay > 0 ? Math.ceil(need / perDay) : 0;
     const eta = days > 0 ? ` ≈ <b>${days}</b> дн. за твоїм темпом` : "";
     const sub = `На рахунку ${fmtUAH(s.account_uah)}, найдешевший папір ${fmtUAH(s.reinvest_min_uah)}.` +
-      (np ? ` Купон ${esc(np.date)} додасть ${Number(np.amount).toLocaleString("uk-UA", { minimumFractionDigits: 2 })} ${curSym(np.currency)}.` : "");
+      (np ? ` Купон ${dayMonth(np.date)} додасть ${Number(np.amount).toLocaleString("uk-UA", { minimumFractionDigits: 2 })} ${curSym(np.currency)}.` : "");
     return box("wait", "○", `Купувати ще рано — бракує ${fmtUAH(need)}${eta}`, sub);
   }
 
@@ -354,8 +390,7 @@ class OddInvestPanel extends HTMLElement {
       if (g.months === -1) { when = "вже досягнуто"; color = "var(--success-color,#43a047)"; }
       else if (g.months === 0) { when = "не досягається за 60 років"; color = "var(--error-color,#db4437)"; }
       else {
-        const yrs = (g.months / 12).toFixed(1);
-        when = `${esc(String(g.date).slice(0, 7))} · через ${yrs} р.`;
+        when = `${monthYear(g.date)} · через ${humanMonths(g.months)}`;
         if (g.before_deadline === true) color = "var(--success-color,#43a047)";
         else if (g.before_deadline === false) color = "var(--warning-color,#ffa600)";
       }
@@ -365,7 +400,7 @@ class OddInvestPanel extends HTMLElement {
         ? `<div class="muted" style="font-size:12px;margin-top:2px">за фактичним темпом: ${
             g.months_actual === -1 ? "вже досягнуто"
             : g.months_actual === 0 ? "не досягається"
-            : `${esc(String(g.date_actual).slice(0, 7))} · через ${(g.months_actual / 12).toFixed(1)} р.`}</div>` : "";
+            : `${monthYear(g.date_actual)} · через ${humanMonths(g.months_actual)}`}</div>` : "";
       const auto = g.auto ? ` <span class="muted" style="font-size:12px">(прогноз на дедлайн)</span>` : "";
       return `<div style="margin-bottom:12px">
         <div style="display:flex;justify-content:space-between;align-items:baseline">
@@ -377,14 +412,14 @@ class OddInvestPanel extends HTMLElement {
         ${fact}${miss}</div>`;
     }).join("");
     const dl = s.settings && s.settings.goal_date
-      ? `<div class="muted" style="font-size:12px">Дедлайн: ${esc(String(s.settings.goal_date).slice(0, 7))}</div>` : "";
+      ? `<div class="muted" style="font-size:12px">Дедлайн: ${monthYear(s.settings.goal_date)}</div>` : "";
     return `<div class="card"><h2>Цілі</h2>${rows}${dl}</div>`;
   }
 
   _paymentsPreviewHTML() {
     const rows = ((this._summary || {}).top_payments || []).slice(0, 4);
     const body = rows.length
-      ? rows.map((p) => `<div class="pv-row"><span class="muted">${esc(p.date)}</span>
+      ? rows.map((p) => `<div class="pv-row"><span class="muted">${dayMonth(p.date)}</span>
           <span>${Number(p.amount).toLocaleString("uk-UA", { minimumFractionDigits: 2 })} ${curSym(p.currency)}</span></div>`).join("")
       : `<div class="muted" style="font-size:13px">Виплат попереду немає.</div>`;
     return `<div class="card"><h2>Найближчі виплати</h2>${body}
@@ -486,7 +521,7 @@ class OddInvestPanel extends HTMLElement {
          <div class="muted" style="font-size:12px;margin-top:4px">${fmtUAH(s.month_invested_uah)} з ${fmtUAH(s.month_target_uah)}</div>`)}
       ${this._tile("Наступна виплата",
         np ? `${Number(np.amount).toLocaleString("uk-UA", { minimumFractionDigits: 2 })} ${curSym(np.currency)}` : "—",
-        np ? `<div class="muted" style="font-size:12px;margin-top:4px">${esc(np.date)}</div>` : "")}
+        np ? `<div class="muted" style="font-size:12px;margin-top:4px">${dayMonth(np.date)}</div>` : "")}
     </div>`;
 
     const chart = await this._chartBlockHTML();
