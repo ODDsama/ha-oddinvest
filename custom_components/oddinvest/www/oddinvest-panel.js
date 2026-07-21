@@ -668,7 +668,7 @@ class OddInvestPanel extends HTMLElement {
       this._api("GET", "lots"),
       this._api("GET", "sales"),
     ]);
-    // «Дохідність» — очікуване наперед (сер. купон), «XIRR» — фактично
+    // «Дохідність» — YTM до погашення від сплаченої ціни, «XIRR» — фактично
     // реалізоване. Тримаємо поруч, бо сенс саме в порівнянні.
     const py = s0.portfolio_yield || {}, xr = s0.xirr || {};
     const pct = (v) => v != null ? v.toFixed(2) + "%" : "—";
@@ -682,7 +682,7 @@ class OddInvestPanel extends HTMLElement {
       ${this._tile("Накопичений купон", fmtUAH(s0.accrued_uah || 0),
         `<div class="muted" style="font-size:12px;margin-top:4px">зароблено, ще не виплачено</div>`)}
       ${Object.entries(py).map(([c, v]) => this._tile(`Дохідність ${curSym(c)}`, pct(v),
-        `<div class="muted" style="font-size:12px;margin-top:4px">очікувана</div>`)).join("")}
+        `<div class="muted" style="font-size:12px;margin-top:4px">до погашення, від сплаченої ціни</div>`)).join("")}
       ${xirrTiles}
     </div>
     ${this._investedByBrokerHTML()}`;
@@ -1246,8 +1246,8 @@ class OddInvestPanel extends HTMLElement {
     const gy = (s.forecast || {}).glide_years || 0;
     const rateSrc = rate <= 0 ? "додай папери — і дохідність порахується сама"
       : term.rate_terminal_pct && gy > 0 && Math.abs(term.rate_terminal_pct - rate) > 0.05
-        ? `за портфелем ${rate.toFixed(1)}% сьогодні → ${term.rate_terminal_pct.toFixed(1)}% за ${humanMonths(Math.round(gy * 12))}`
-        : `за портфелем ${rate.toFixed(1)}% (сер. купон)`;
+        ? `за портфелем ${rate.toFixed(1)}% (YTM) сьогодні → ${term.rate_terminal_pct.toFixed(1)}% за ${humanMonths(Math.round(gy * 12))}`
+        : `за портфелем ${rate.toFixed(1)}% (YTM до погашення)`;
 
     const hasActual = (s.actual_monthly_uah || 0) > 0;
     const rows = rowsData.length ? rowsData.map((r) =>
