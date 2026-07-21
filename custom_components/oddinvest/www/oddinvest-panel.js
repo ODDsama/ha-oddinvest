@@ -587,7 +587,15 @@ class OddInvestPanel extends HTMLElement {
   // саме тоді, коли ти плануєш наступний крок, а ще був таблицею-звалищем
   // на весь довідник, тож тут свідомо лише верхівка.
   _reinvestHTML() {
-    const rows = (this._reinvest || []).slice(0, 4);
+    // По одному найкращому паперу на валюту, а не просто верхівка списку.
+    // Верхівка збиралася з однієї валюти (сортування спершу дивиться на
+    // валютний дефіцит), і чотири майже однакові папери не давали вибору —
+    // тоді як порівняти гривню з доларом і є сенсом цього блоку.
+    const byCur = new Map();
+    for (const r of this._reinvest || []) {
+      if (!byCur.has(r.currency)) byCur.set(r.currency, r);
+    }
+    const rows = [...byCur.values()].sort((a, b) => (b.real_pct || 0) - (a.real_pct || 0));
     if (!rows.length) return "";
     const s = this._summary || {};
     const purse = Object.entries(s.brokers || {})
@@ -597,13 +605,17 @@ class OddInvestPanel extends HTMLElement {
     const items = rows.map((r) => {
       const fits = (r.brokers || []).map((f) => `${esc(f.broker)} ×${f.qty}`).join(" · ");
       const cost = r.cost_per_bond ? fmtCur(Number(r.cost_per_bond.amount), curSym(r.currency)) : "";
+      // Коли не по кишені — кажемо СКІЛЬКИ бракує: «ще не по кишені» саме
+      // по собі не підказує, скільки лишилось відкласти.
+      const purseCur = Math.max(0, ...Object.values(s.brokers || {}).map((m) => m[r.currency] || 0));
+      const need = Number((r.cost_per_bond || {}).amount || 0) - purseCur;
       return `<div style="margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
           <span><b>${esc(r.isin)}</b> <span class="muted" style="font-size:12px">${curSym(r.currency)} · до ${monthYearGen(r.maturity)}</span></span>
           <span><b>${(r.real_pct || 0).toFixed(1)}%</b> <span class="muted" style="font-size:12px">реальних</span></span>
         </div>
         <div class="muted" style="font-size:11px;margin-top:2px">${cost} · YTM ${(r.ytm_pct || 0).toFixed(1)}%${
-          fits ? ` · ${fits}` : ` · ще не по кишені`}</div>
+          fits ? ` · ${fits}` : need > 0 ? ` · бракує ${fmtCur(need, curSym(r.currency))}` : ""}</div>
         ${r.reason ? `<div class="muted" style="font-size:11px">${esc(r.reason)}</div>` : ""}
       </div>`;
     }).join("");
