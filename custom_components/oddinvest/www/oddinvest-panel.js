@@ -1204,19 +1204,18 @@ class OddInvestPanel extends HTMLElement {
     main.querySelector("#setForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const f = e.target;
+      // Збираємо payload лише з полів, які РЕАЛЬНО є у формі. Так
+      // видалення поля не роняє сабміт і — головне — не шле порожнє
+      // значення, яке затерло б налаштування (PUT часткове).
+      // «channels» тут свідомо немає: брокерами керує окрема картка.
+      const payload = {};
+      for (const k of ["monthly_target_uah", "usd_target_share_pct", "eur_target_share_pct",
+        "target_duration_years", "goal_pessimistic_uah", "goal_realistic_uah",
+        "goal_optimistic_uah", "goal_date"]) {
+        if (f.elements[k]) payload[k] = f.elements[k].value.trim();
+      }
       try {
-        await this._api("PUT", "settings", {
-          monthly_target_uah: f.monthly_target_uah.value.trim(),
-          usd_target_share_pct: f.usd_target_share_pct.value.trim(),
-          eur_target_share_pct: f.eur_target_share_pct.value.trim(),
-          target_duration_years: f.target_duration_years.value.trim(),
-          channels: f.channels.value.trim(),
-          goal_pessimistic_uah: f.goal_pessimistic_uah.value.trim(),
-          goal_realistic_uah: f.goal_realistic_uah.value.trim(),
-          goal_optimistic_uah: f.goal_optimistic_uah.value.trim(),
-          goal_date: f.goal_date.value.trim(),
-          // channels НЕ чіпаємо — брокерами керує окрема картка
-        });
+        await this._api("PUT", "settings", payload);
         this._toast("Налаштування збережено"); this._loadTab();
       } catch (err) { this._toast(String(err.message || err), false); }
     });
