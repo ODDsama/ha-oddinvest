@@ -66,7 +66,7 @@ const INFO = {
   income: ["Дохід по місяцях", "Скільки купонів і погашень надійде кожного місяця на рік наперед (грн-екв). Це твій потік для реінвесту — видно, коли назбирається на наступний папір. Порожній місяць = виплат немає."],
   currency: ["Валюта: факт vs ціль", "Синій стовпчик — поточна частка валюти в портфелі, сірий — твоя цільова частка з Налаштувань. Синій нижчий за сірий → валюту треба добирати; вищий → уже перебір."],
   capital: ["Крива капіталу", "Проєкція капіталу на 1/3/5/10 років. Сіра лінія — просто сума внесків без відсотків, синя — з реінвестом під дохідність портфеля. Розрив між ними — це робота складного відсотка. Модель — припущення, не гарантія."],
-  forecast: ["Скільки буде на дедлайн", "Усі три суми — на ОДНУ дату (твій дедлайн), тому їх можна порівнювати між собою. Відрізняються вони допущеннями, а не бажаннями: реалістичний бере плановий внесок і поточну дохідність портфеля, оптимістичний додає 3 п.п. до ставки, песимістичний — віднімає. Коли назбирається історія поповнень, межі внеску беруться з реального темпу: менший із «план vs факт» іде в песимістичний, більший — в оптимістичний. Під кожним рядком написано, з яких саме допущень він порахований. Ціль — окремий орієнтир: смужка показує, яку її частину закриває сценарій."],
+  forecast: ["Скільки буде на дедлайн", "Усі три суми — на ОДНУ дату (твій дедлайн) і в гривні СЬОГОДНІШНЬОЇ купівельної спроможності, тому їх можна порівнювати між собою і з ціллю, яку ти задав сьогодні. Перемикач ₴/$ нічого не перераховує: це та сама величина, поділена на сьогоднішній курс. У доларах рядок «номінально» зникає — долар і є реальна одиниця, тож у ньому номінальна й реальна суми збігаються. Сценарії відрізняються трьома допущеннями: внеском (менший із «план vs факт» — у песимістичний, більший — в оптимістичний), ставкою реінвесту (±3 п.п.) і темпом знецінення гривні (±4 п.п. від того, що задано в Налаштуваннях). Кожна валюта рахується окремо у своїй валюті: гривневий рукав наприкінці переводиться в сьогоднішні гроші й тому втрачає, а долар і євро купівельну спроможність тримають. Саме тому гривневий папір під 16% не завжди кращий за доларовий під 4%: при знеціненні понад ~11.5%/рік долар обганяє."],
 };
 const infoBtn = (k) => `<button class="info" data-info="${k}" aria-label="Як це читати" title="Як це читати">i</button>`;
 
@@ -118,6 +118,10 @@ class OddInvestPanel extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._tab = "overview";
     this._inited = false;
+    // Обрана одиниця прогнозу переживає перезавантаження: перемикати її
+    // щоразу заново дратує більше, ніж сам перемикач допомагає.
+    try { this._fcUnit = localStorage.getItem("oddinvest.fcUnit") || "UAH"; }
+    catch (_) { this._fcUnit = "UAH"; }
   }
 
   set hass(hass) {
@@ -198,6 +202,10 @@ class OddInvestPanel extends HTMLElement {
                        background:var(--secondary-background-color); color:var(--primary-text-color); font-size:14px; }
         .progress { height:8px; border-radius:6px; background:var(--divider-color); overflow:hidden; margin-top:6px; }
         .progress>span { display:block; height:100%; background:var(--primary-color); }
+        .unitbox { display:inline-flex; border:1px solid var(--divider-color); border-radius:8px; overflow:hidden; }
+        .unitbox .unit { border:0; background:transparent; color:var(--secondary-text-color); font:inherit;
+          font-size:13px; padding:2px 10px; cursor:pointer; }
+        .unitbox .unit.on { background:var(--primary-color); color:#fff; }
         .pill { padding:2px 8px; border-radius:10px; font-size:12px; background:var(--divider-color); }
         .pill.coupon { background:var(--success-color,#43a047); color:#fff; }
         .pill.redemption { background:var(--warning-color,#ffa600); color:#111; }
@@ -282,6 +290,15 @@ class OddInvestPanel extends HTMLElement {
     );
     // попапи «як це читати» — делеговано на весь shadow root
     this.shadowRoot.addEventListener("click", (e) => {
+      // перемикач ₴/$ — перемальовуємо лише картку прогнозу, без запиту
+      const u = e.target.closest("[data-fcunit]");
+      if (u) {
+        this._fcUnit = u.dataset.fcunit;
+        try { localStorage.setItem("oddinvest.fcUnit", this._fcUnit); } catch (_) {}
+        const card = this.shadowRoot.getElementById("fcCard");
+        if (card) card.outerHTML = this._goalsHTML();
+        return;
+      }
       const b = e.target.closest("[data-info]");
       const pop = this.shadowRoot.getElementById("infoPop");
       if (b) {
@@ -377,14 +394,23 @@ class OddInvestPanel extends HTMLElement {
   // Віяло прогнозів на дедлайн: скільки буде на одну й ту саму дату за
   // трьох наборів допущень. Ціль — одна сума-орієнтир, з якою вони
   // порівнюються; вона НЕ учасник віяла.
+  //
+  // Суми — у гривні СЬОГОДНІШНЬОЇ купівельної спроможності, бо саме з
+  // сьогоднішньою ціллю їх і порівнюють. Перемикач ₴/$ нічого не
+  // перераховує: це та сама величина, поділена на сьогоднішній курс.
   _goalsHTML() {
     const s = this._summary || {};
     const f = s.forecast;
     if (!f || !(f.rows || []).length) {
-      return `<div class="card"><h2>Скільки буде на дедлайн</h2><div class="muted">Задай дедлайн
+      return `<div class="card" id="fcCard"><h2>Скільки буде на дедлайн</h2><div class="muted">Задай дедлайн
         у «Налаштуваннях» — і тут зʼявиться, скільки в тебе буде на цю дату
         за песимістичного, реалістичного й оптимістичного сценаріїв.</div></div>`;
     }
+    const rate0 = f.rate0_usd || 0;
+    const usd = this._fcUnit === "USD" && rate0 > 0;
+    const money = (v) => usd
+      ? "$" + (Math.round((v || 0) / rate0)).toLocaleString("uk-UA")
+      : fmtUAH(v);
     const goal = f.goal_amount || 0;
     // Спільна шкала для всіх трьох смужок — інакше вони не порівнюються.
     // Беремо максимум із цілі та найбільшого сценарію: коли ціль далеко,
@@ -400,14 +426,23 @@ class OddInvestPanel extends HTMLElement {
         ? ` <span class="muted" style="font-size:12px">← найімовірніше</span>` : "";
       const share = goal > 0
         ? `<span class="muted" style="font-size:12px">${(r.goal_pct || 0).toFixed(1)}% цілі</span>` : "";
+      // Ставки по валютах: саме тут видно, що долар під 4% і гривня під
+      // 16% — не те саме, що здається.
+      const rates = (r.by_currency || []).map((c) =>
+        `${curSym(c.currency)} ${(c.rate_pct || 0).toFixed(1)}%`).join(" / ")
+        || `${(r.rate_pct || 0).toFixed(1)}%`;
+      // У доларах «номінально» не існує: долар і є реальна одиниця, тож
+      // номінальна й реальна суми в ньому збігаються.
+      const nom = !usd && r.amount_nominal > r.amount
+        ? ` · номінально ${fmtUAH(r.amount_nominal)}` : "";
       return `<div style="margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
           <span>${esc(r.label)}${mark}</span>
-          <span><b>${fmtUAH(r.amount)}</b> ${share}</span>
+          <span><b>${money(r.amount)}</b> ${share}</span>
         </div>
         <div class="progress" style="margin-top:5px;position:relative"><span style="width:${pct}%;background:${COLOR[r.key] || "var(--primary-color)"}"></span>${
           goalAt >= 0 ? `<i style="position:absolute;top:0;bottom:0;left:calc(${goalAt}% - 1px);width:2px;background:var(--primary-text-color);opacity:.55"></i>` : ""}</div>
-        <div class="muted" style="font-size:11px;margin-top:2px">${fmtUAH(r.contrib_monthly)}/міс · ${(r.rate_pct || 0).toFixed(1)}% річних</div>
+        <div class="muted" style="font-size:11px;margin-top:2px">${fmtUAH(r.contrib_monthly)}/міс · ставки ${rates} · гривня слабшає ${(r.devaluation_pct || 0).toFixed(1)}%/рік${nom}</div>
       </div>`;
     }).join("");
 
@@ -427,13 +462,17 @@ class OddInvestPanel extends HTMLElement {
       const need = f.required_monthly > 0
         ? `<div class="muted" style="font-size:12px;margin-top:2px">щоб устигнути до дедлайну — ${fmtUAH(f.required_monthly)}/міс замість ${fmtUAH(f.contrib_plan)}/міс</div>` : "";
       goalBlock = `<div style="border-top:1px solid var(--divider-color,#3334);padding-top:8px;margin-top:4px">
-        <div>Ціль <b>${fmtUAH(goal)}</b> — ${short}</div>
+        <div>Ціль <b>${money(goal)}</b> — ${short}</div>
         <div class="muted" style="font-size:12px;margin-top:2px">за реалістичного темпу: ${eta}</div>
         ${need}</div>`;
     }
+    const unitBtn = (u, lbl) => `<button class="unit${usd === (u === "USD") ? " on" : ""}" data-fcunit="${u}">${lbl}</button>`;
+    const toggle = rate0 > 0
+      ? `<span class="unitbox">${unitBtn("UAH", "₴")}${unitBtn("USD", "$")}</span>` : "";
     const head = `<div class="muted" style="font-size:12px;margin-bottom:8px">на ${monthYear(f.date)} · через ${humanMonths(f.months)}${
-      goal > 0 ? " · вертикальна риска — ціль" : ""}</div>`;
-    return `<div class="card"><h2>Скільки буде на дедлайн ${infoBtn("forecast")}</h2>${head}${rows}${goalBlock}</div>`;
+      goal > 0 ? " · вертикальна риска — ціль" : ""} · у ${usd ? "доларах" : "сьогоднішніх гривнях"}</div>`;
+    return `<div class="card" id="fcCard"><h2 class="h-row" style="justify-content:space-between">
+      <span>Скільки буде на дедлайн ${infoBtn("forecast")}</span>${toggle}</h2>${head}${rows}${goalBlock}</div>`;
   }
 
   _paymentsPreviewHTML() {
@@ -1235,6 +1274,7 @@ class OddInvestPanel extends HTMLElement {
           <label>Цільова дюрація, років<input name="target_duration_years" inputmode="decimal" placeholder="напр. 3" value="${esc(s.target_duration_years || "")}"></label>
           <label>Ціль, ₴<input name="goal_amount_uah" inputmode="decimal" placeholder="скільки хочу накопичити" value="${esc(s.goal_amount_uah || "")}"></label>
           <label>Дедлайн — коли<input name="goal_date" type="date" value="${esc(s.goal_date || "")}"></label>
+          <label>Гривня слабшає, %/рік<input name="uah_devaluation_pct" inputmode="decimal" placeholder="порожньо = 6" value="${esc(s.uah_devaluation_pct || "")}"></label>
           <button type="submit">Зберегти</button>
         </form>
       </div>
@@ -1263,7 +1303,8 @@ class OddInvestPanel extends HTMLElement {
       // «channels» тут свідомо немає: брокерами керує окрема картка.
       const payload = {};
       for (const k of ["monthly_target_uah", "usd_target_share_pct", "eur_target_share_pct",
-        "target_duration_years", "goal_amount_uah", "goal_date"]) {
+        "target_duration_years", "goal_amount_uah", "goal_date",
+        "uah_devaluation_pct"]) {
         if (f.elements[k]) payload[k] = f.elements[k].value.trim();
       }
       try {
