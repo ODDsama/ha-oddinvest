@@ -662,7 +662,10 @@ class OddInvestPanel extends HTMLElement {
              <div class="muted" style="font-size:12px;margin-top:4px">${
                s.month_deposited_uah === undefined
                  ? `вкладено ${fmtUAH(s.month_invested_uah)}` // старий бекенд рахував купівлі
-                 : `внесено ${fmtUAH(s.month_deposited_uah)}`} з ${fmtUAH(s.month_target_uah)}</div>`
+                 : `внесено ${fmtUAH(s.month_deposited_uah)}`} з ${fmtUAH(s.month_target_uah)}</div>
+             ${s.month_withdrawn_uah > 0
+               ? `<div class="muted" style="font-size:11px;margin-top:2px">нетто: поповнення ${
+                   fmtUAH((s.month_deposited_uah || 0) + s.month_withdrawn_uah)} − зняття ${fmtUAH(s.month_withdrawn_uah)}</div>` : ""}`
           : `<div class="muted" style="font-size:12px;margin-top:4px">задай ціль і дедлайн — план порахується сам</div>`)}
       ${this._tile("Наступна виплата",
         np ? `${Number(np.amount).toLocaleString("uk-UA", { minimumFractionDigits: 2 })} ${curSym(np.currency)}` : "—",
