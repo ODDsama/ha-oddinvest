@@ -401,12 +401,17 @@ class OddInvestPanel extends HTMLElement {
     return box("wait", "○", `Купувати ще рано — бракує ${fmtUAH(need)}${eta}`, sub);
   }
 
-  // Віяло розкидає ПОТРІБНИЙ ВНЕСОК, а не суму на дедлайн.
+  // Віяло розкидає ПОТРІБНИЙ ВНЕСОК, а не суму на дедлайн: щойно внесок
+  // підбирається під ціль, сума на дедлайн у всіх сценаріях однакова —
+  // це і є ціль. Корисне натомість те, скільки ціль КОШТУЄ щомісяця за
+  // різного ринку.
   //
-  // Щойно внесок підбирається під ціль, сума на дедлайн у всіх сценаріях
-  // однакова — це і є ціль, — тож головним числом вона бути не може.
-  // Натомість корисне саме те, скільки ціль КОШТУЄ щомісяця за різного
-  // ринку: платіж один, а посильність у нього різна.
+  // Верстка: спершу вилка «від і до» одним великим числом, бо саме вона
+  // відповідає на «наскільки це реально». Далі рядки з допущеннями, з
+  // яких прибрано все, що в них однакове: сьогоднішні ставки в усіх
+  // рядках ті самі, тож вони винесені в шапку один раз, а в рядках
+  // лишились тільки довгострокові. Смужки в ринкових рядках прибрано —
+  // 72/85/100% візуально майже не відрізнялись і лише додавали шуму.
   //
   // Старий бекенд required_monthly у рядках не надсилає — тоді лишаємо
   // попередній вигляд (сума на дедлайн), щоб панель не показувала порожньо.
@@ -429,77 +434,83 @@ class OddInvestPanel extends HTMLElement {
     // Внески лишаються в гривні навіть у доларовому вигляді: відкладаєш
     // ти гривні, і рішення про суму приймаєш теж у гривнях.
     const payOf = (r) => (r.key === "actual" ? r.contrib_monthly : r.required_monthly) || 0;
-    const need = payOf(f.rows.find((r) => r.key === "realistic") || {});
-    const scale = asPayment
-      ? Math.max(...f.rows.map(payOf), 1)
-      : Math.max(goal, ...f.rows.map((r) => r.amount || 0), 1);
-    const goalAt = !asPayment && goal > 0 ? Math.min(100, (goal / scale) * 100) : -1;
-    const COLOR = { optimistic: "var(--success-color,#43a047)", realistic: "var(--primary-color,#7b6cf6)",
-      pessimistic: "var(--warning-color,#ffa600)", actual: "var(--info-color,#039be5)" };
-
-    const scenarioRow = (r) => {
-      const val = asPayment ? payOf(r) : (r.amount || 0);
-      const pct = Math.max(0, Math.min(100, (val / scale) * 100));
-      const mark = r.key === "realistic"
-        ? ` <span class="muted" style="font-size:12px">← найімовірніше</span>`
-        : r.key === "actual" && hist > 0
-          ? ` <span class="muted" style="font-size:12px">за ${humanMonths(hist)} історії</span>` : "";
-      const headline = asPayment ? `${fmtUAH(val)}/міс` : money(val);
-      const right = asPayment
-        ? (r.key === "actual" && need > 0
-            ? `<span class="muted" style="font-size:12px">${(val / need * 100).toFixed(0)}% від потрібного</span>` : "")
-        : (goal > 0 ? `<span class="muted" style="font-size:12px">${(r.goal_pct || 0).toFixed(1)}% цілі</span>` : "");
-      const glideFor = f.glide_years > 0 ? ` за ${humanMonths(Math.round(f.glide_years * 12))}` : "";
-      const rates = (r.by_currency || []).map((c) =>
-        c.rate_terminal_pct && Math.abs(c.rate_terminal_pct - c.rate_pct) > 0.05
-          ? `${curSym(c.currency)} ${(c.rate_pct || 0).toFixed(1)}% → ${c.rate_terminal_pct.toFixed(1)}%${glideFor}`
-          : `${curSym(c.currency)} ${(c.rate_pct || 0).toFixed(1)}%`).join(" / ")
-        || `${(r.rate_pct || 0).toFixed(1)}%`;
-      // Сума на дедлайн доречна лише там, де вона несе новину: у рядку
-      // «За фактом». У ринкових рядках вона дорівнює цілі за побудовою.
-      const tail = asPayment
-        ? (r.key === "actual"
-            ? ` · на дедлайн ${money(r.amount)}${goal > 0 ? ` (${(r.goal_pct || 0).toFixed(1)}% цілі)` : ""}` : "")
-        : (!usd && r.amount_nominal > r.amount ? ` · номінально ${fmtUAH(r.amount_nominal)}` : "");
-      const contrib = asPayment ? "" : `${fmtUAH(r.contrib_monthly)}/міс · `;
-      return `<div style="margin-bottom:10px">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
-          <span>${esc(r.label)}${mark}</span>
-          <span><b>${headline}</b> ${right}</span>
-        </div>
-        <div class="progress" style="margin-top:5px;position:relative"><span style="width:${pct}%;background:${COLOR[r.key] || "var(--primary-color)"}"></span>${
-          goalAt >= 0 ? `<i style="position:absolute;top:0;bottom:0;left:calc(${goalAt}% - 1px);width:2px;background:var(--primary-text-color);opacity:.55"></i>` : ""}</div>
-        <div class="muted" style="font-size:11px;margin-top:2px">${contrib}ставки ${rates} · гривня слабшає ${(r.devaluation_pct || 0).toFixed(1)}%/рік${tail}</div>
-      </div>`;
-    };
-
     const market = f.rows.filter((r) => r.key !== "actual");
     const actual = f.rows.find((r) => r.key === "actual");
-    const rows = market.map(scenarioRow).join("")
-      + (actual
-        ? `<div style="border-top:1px solid var(--divider-color,#3334);padding-top:8px;margin-top:4px">
-             ${scenarioRow(actual)}</div>`
-        : `<div class="muted" style="font-size:12px;border-top:1px solid var(--divider-color,#3334);padding-top:8px;margin-top:4px">
-             Прогноз за фактичним темпом зʼявиться після першого поповнення.</div>`);
+    const real = market.find((r) => r.key === "realistic") || {};
+    const need = payOf(real);
+    const COLOR = { optimistic: "var(--success-color,#43a047)", realistic: "var(--primary-color,#7b6cf6)",
+      pessimistic: "var(--warning-color,#ffa600)" };
+    // Планові суми — без копійок: у числі «96 973,50 ₴/міс» дробова
+    // частина не несе рішення, а заважає порівнювати рядки поглядом.
+    const pay = (v) => Math.round(v || 0).toLocaleString("uk-UA") + " ₴";
+    const goalFmt = (v) => usd ? money(v) : pay(v);
 
-    let goalBlock = "";
-    if (goal > 0) {
-      const real = f.rows.find((r) => r.key === "realistic") || {};
-      const eta = (r) => r.goal_months === -1 ? "вже досягнуто"
-        : r.goal_months > 0 ? `${monthYear(r.goal_date)} · через ${humanMonths(r.goal_months)}`
-        : "не досягається за 60 років";
-      goalBlock = `<div style="border-top:1px solid var(--divider-color,#3334);padding-top:8px;margin-top:4px">
-        <div class="muted" style="font-size:12px">за реалістичного темпу ціль: ${eta(real)}</div>
-        ${actual ? `<div class="muted" style="font-size:12px;margin-top:2px">за фактичним темпом: ${eta(actual)}</div>` : ""}</div>`;
+    // Вилка — головне число блока.
+    let range = "";
+    if (asPayment && market.length) {
+      const vals = market.map(payOf).filter((v) => v > 0).sort((a, b) => a - b);
+      if (vals.length) {
+        range = `<div style="margin:2px 0 12px">
+          <div style="font-size:22px;font-weight:600">${Math.round(vals[0]).toLocaleString("uk-UA")} — ${pay(vals[vals.length - 1])}<span style="font-size:14px;font-weight:400">/міс</span></div>
+          ${need > 0 ? `<div class="muted" style="font-size:12px;margin-top:2px">найімовірніше ${pay(need)}/міс</div>` : ""}
+        </div>`;
+      }
     }
+
+    // Довгострокові ставки — єдине, чим рядки відрізняються.
+    const termRates = (r) => (r.by_currency || []).map((c) =>
+      c.rate_terminal_pct && Math.abs(c.rate_terminal_pct - c.rate_pct) > 0.05
+        ? `${curSym(c.currency)} →${c.rate_terminal_pct.toFixed(1)}%`
+        : `${curSym(c.currency)} ${(c.rate_pct || 0).toFixed(1)}%`).join(" · ");
+
+    const marketRows = market.map((r) => {
+      const val = asPayment ? payOf(r) : (r.amount || 0);
+      // Позначки «найімовірніше» тут немає: її вже сказано у вилці вище,
+      // а реалістичний рядок і так виділений кольором.
+      return `<div style="margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+          <span style="color:${COLOR[r.key] || "inherit"}">${esc(r.label)}</span>
+          <span><b>${asPayment ? pay(val) + "/міс" : money(val)}</b></span>
+        </div>
+        <div class="muted" style="font-size:11px;margin-top:1px">${termRates(r)} · гривня слабшає ${(r.devaluation_pct || 0).toFixed(1)}%/рік</div>
+      </div>`;
+    }).join("");
+
+    // Факт: головне тут не сума, а яку частку потрібного ти покриваєш.
+    let actualBlock = "";
+    if (actual) {
+      const share = need > 0 ? Math.min(100, payOf(actual) / need * 100) : 0;
+      const eta = actual.goal_months === -1 ? "вже досягнуто"
+        : actual.goal_months > 0 ? `${monthYear(actual.goal_date)}`
+        : "не досягається за 60 років";
+      actualBlock = `<div style="border-top:1px solid var(--divider-color,#3334);padding-top:10px;margin-top:10px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+          <span>За фактом ${hist > 0 ? `<span class="muted" style="font-size:12px">за ${humanMonths(hist)} історії</span>` : ""}</span>
+          <span><b>${pay(payOf(actual))}/міс</b>${asPayment && need > 0
+            ? ` <span style="color:var(--info-color,#039be5)">— ${share.toFixed(0)}% від потрібного</span>` : ""}</span>
+        </div>
+        ${asPayment && need > 0 ? `<div class="progress" style="margin-top:6px"><span style="width:${share}%;background:var(--info-color,#039be5)"></span></div>` : ""}
+        <div class="muted" style="font-size:11px;margin-top:4px">на дедлайн ${goalFmt(actual.amount)}${
+          goal > 0 ? ` — ${(actual.goal_pct || 0).toFixed(1)}% цілі` : ""} · за цим темпом ціль ${eta}</div>
+      </div>`;
+    } else {
+      actualBlock = `<div class="muted" style="font-size:12px;border-top:1px solid var(--divider-color,#3334);padding-top:10px;margin-top:10px">
+        Прогноз за фактичним темпом зʼявиться після першого поповнення.</div>`;
+    }
+
+    // Сьогоднішні ставки однакові в усіх рядках — кажемо їх один раз тут.
+    const nowRates = (real.by_currency || []).map((c) =>
+      `${curSym(c.currency)} ${(c.rate_pct || 0).toFixed(1)}%`).join(" · ");
     const unitBtn = (u, lbl) => `<button class="unit${usd === (u === "USD") ? " on" : ""}" data-fcunit="${u}">${lbl}</button>`;
     const toggle = rate0 > 0 ? `<span class="unitbox">${unitBtn("UAH", "₴")}${unitBtn("USD", "$")}</span>` : "";
-    const head = `<div class="muted" style="font-size:12px;margin-bottom:8px">${
-      asPayment && goal > 0 ? `щоб дійти до ${money(goal)} до ${monthYearGen(f.date)}`
-        : `на ${monthYear(f.date)}`} · через ${humanMonths(f.months)}${
-      !asPayment && goal > 0 ? " · вертикальна риска — ціль" : ""} · у ${usd ? "доларах" : "сьогоднішніх гривнях"}</div>`;
+    const head = `<div class="muted" style="font-size:12px">${
+      asPayment && goal > 0 ? `щоб дійти до ${goalFmt(goal)} до ${monthYearGen(f.date)}` : `на ${monthYear(f.date)}`
+      } · через ${humanMonths(f.months)}</div>
+      ${nowRates ? `<div class="muted" style="font-size:11px;margin-top:2px">сьогодні ставки ${nowRates}${
+        f.glide_years > 0 ? ` → сповзають до довгострокових за ${humanMonths(Math.round(f.glide_years * 12))}` : ""}</div>` : ""}`;
     return `<div class="card" id="fcCard"><h2 class="h-row" style="justify-content:space-between">
-      <span>${asPayment ? "Скільки треба вносити" : "Скільки буде на дедлайн"} ${infoBtn("forecast")}</span>${toggle}</h2>${head}${rows}${goalBlock}</div>`;
+      <span>${asPayment ? "Скільки треба вносити" : "Скільки буде на дедлайн"} ${infoBtn("forecast")}</span>${toggle}</h2>
+      ${head}${range}${marketRows}${actualBlock}</div>`;
   }
 
   _paymentsPreviewHTML() {
