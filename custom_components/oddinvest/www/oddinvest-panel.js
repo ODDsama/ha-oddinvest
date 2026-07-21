@@ -49,6 +49,14 @@ function monthYear(iso) {
   if (p.length < 2) return String(iso || "");
   return `${MON_NOM[+p[1] - 1] || p[1]} ${p[0]}`;
 }
+// «2029-03-17» -> «березня 2027»: родовий відмінок для конструкцій
+// «до <місяця>», де називний дав би «до березень».
+function monthYearGen(iso) {
+  const p = String(iso || "").split("-");
+  if (p.length < 2) return String(iso || "");
+  return `${MON_GEN[+p[1] - 1] || p[1]} ${p[0]}`;
+}
+
 // «2026-07-22» -> «22 липня», а якщо не цьогоріч — «20 січня 2027»,
 // бо без року дата наступної виплати читається як «ось-ось».
 function dayMonth(iso) {
@@ -66,6 +74,7 @@ const INFO = {
   income: ["Дохід по місяцях", "Скільки купонів і погашень надійде кожного місяця на рік наперед (грн-екв). Це твій потік для реінвесту — видно, коли назбирається на наступний папір. Порожній місяць = виплат немає."],
   currency: ["Валюта: факт vs ціль", "Синій стовпчик — поточна частка валюти в портфелі, сірий — твоя цільова частка з Налаштувань. Синій нижчий за сірий → валюту треба добирати; вищий → уже перебір."],
   capital: ["Крива капіталу", "Проєкція капіталу на 1/3/5/10 років. Сіра лінія — просто сума внесків без відсотків, синя — з реінвестом під дохідність портфеля. Розрив між ними — це робота складного відсотка. Модель — припущення, не гарантія."],
+  reinvest: ["Що купити", "Папери відранжовані за РЕАЛЬНОЮ дохідністю — тією, що лишається в сьогоднішніх гривнях після знецінення. Саме вона робить гривневі й валютні папери порівнянними: гривневий під 16% при знеціненні 6%/рік дає ~9.4% реальних, а доларовий під 4% так і лишається 4%, бо долар купівельну спроможність тримає. YTM — дохідність до погашення за ціною входу; вона вища за купонну ставку, бо купон складається всередині року. Ціни в довіднику НБУ немає, тож рахуємо «за номіналом плюс НКД» — реальна ціна в брокера може відрізнятись, і тоді дохідність теж. «mono ×3» означає, скільки таких паперів тягне баланс саме цього брокера: рахунки роздільні, і гривня на inzhur не купить папір у mono. Це інструмент для порівняння, а не порада купувати."],
   forecast: ["Скільки буде на дедлайн", "Усі три суми — на ОДНУ дату (твій дедлайн) і в гривні СЬОГОДНІШНЬОЇ купівельної спроможності, тому їх можна порівнювати між собою і з ціллю, яку ти задав сьогодні. Перемикач ₴/$ нічого не перераховує: це та сама величина, поділена на сьогоднішній курс. У доларах рядок «номінально» зникає — долар і є реальна одиниця, тож у ньому номінальна й реальна суми збігаються. Запис «₴ 16.7% → 11.0%» означає, що ставка не вічна: сьогоднішня — це факт (за нею можна купити зараз), а далі вона лінійно сповзає до довгострокової за стільки років, скільки задано в Налаштуваннях. Сценарії відрізняються трьома допущеннями, і жодне з них не чіпає сьогоднішню ставку: внеском (менший із «план vs факт» — у песимістичний, більший — в оптимістичний), ДОВГОСТРОКОВОЮ ставкою (±3 п.п.) і темпом знецінення гривні (±4 п.п.). Кожна валюта рахується окремо у своїй валюті: гривневий рукав наприкінці переводиться в сьогоднішні гроші й тому втрачає, а долар і євро купівельну спроможність тримають. Саме тому гривневий папір під 16% не завжди кращий за доларовий під 4%: при знеціненні понад ~11.5%/рік долар обганяє."],
 };
 const infoBtn = (k) => `<button class="info" data-info="${k}" aria-label="Як це читати" title="Як це читати">i</button>`;
@@ -572,6 +581,37 @@ class OddInvestPanel extends HTMLElement {
       ставки й графіки виплат можуть бути несвіжі. Натисни «↻ Оновити НБУ».</div></div></div>`;
   }
 
+  // Що купити: папери, відранжовані за РЕАЛЬНОЮ дохідністю в сьогоднішніх
+  // гривнях. Показуємо кілька позицій ЗАВЖДИ — попередній варіант зникав
+  // саме тоді, коли ти плануєш наступний крок, а ще був таблицею-звалищем
+  // на весь довідник, тож тут свідомо лише верхівка.
+  _reinvestHTML() {
+    const rows = (this._reinvest || []).slice(0, 4);
+    if (!rows.length) return "";
+    const s = this._summary || {};
+    const purse = Object.entries(s.brokers || {})
+      .flatMap(([b, byCur]) => Object.entries(byCur)
+        .filter(([, v]) => v > 0)
+        .map(([c, v]) => `${esc(b)} ${fmtCur(v, curSym(c))}`)).join(" · ");
+    const items = rows.map((r) => {
+      const fits = (r.brokers || []).map((f) => `${esc(f.broker)} ×${f.qty}`).join(" · ");
+      const cost = r.cost_per_bond ? fmtCur(Number(r.cost_per_bond.amount), curSym(r.currency)) : "";
+      return `<div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+          <span><b>${esc(r.isin)}</b> <span class="muted" style="font-size:12px">${curSym(r.currency)} · до ${monthYearGen(r.maturity)}</span></span>
+          <span><b>${(r.real_pct || 0).toFixed(1)}%</b> <span class="muted" style="font-size:12px">реальних</span></span>
+        </div>
+        <div class="muted" style="font-size:11px;margin-top:2px">${cost} · YTM ${(r.ytm_pct || 0).toFixed(1)}%${
+          fits ? ` · ${fits}` : ` · ще не по кишені`}</div>
+        ${r.reason ? `<div class="muted" style="font-size:11px">${esc(r.reason)}</div>` : ""}
+      </div>`;
+    }).join("");
+    return `<div class="card"><h2 class="h-row" style="justify-content:space-between">
+      <span>Що купити ${infoBtn("reinvest")}</span></h2>
+      ${purse ? `<div class="muted" style="font-size:12px;margin-bottom:8px">${purse}</div>` : ""}
+      ${items}</div>`;
+  }
+
   async _renderOverview(main) {
     const s = this._summary || {};
     const cap = (s.nominal_uah_eq || 0) + (s.account_uah || 0);
@@ -588,6 +628,10 @@ class OddInvestPanel extends HTMLElement {
         np ? `<div class="muted" style="font-size:12px;margin-top:4px">${dayMonth(np.date)}</div>` : "")}
     </div>`;
 
+    // Помічник живе на окремому маршруті: тягнемо разом з оглядом, щоб
+    // картка не «доїжджала» після решти.
+    try { this._reinvest = await this._api("GET", "reinvest"); }
+    catch (_) { this._reinvest = []; }
     const chart = await this._chartBlockHTML();
     main.innerHTML = `
       ${this._nbuStaleHTML()}
@@ -599,6 +643,7 @@ class OddInvestPanel extends HTMLElement {
       </div>
       ${tiles}
       ${this._goalsHTML()}
+      ${this._reinvestHTML()}
       <div class="ov-grid">${chart}${this._paymentsPreviewHTML()}</div>
       ${this._extraChartsHTML()}
       ${this._snapshotsTableHTML()}`;
