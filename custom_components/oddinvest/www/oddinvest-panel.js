@@ -74,6 +74,7 @@ const INFO = {
   income: ["Дохід по місяцях", "Скільки купонів і погашень надійде кожного місяця на рік наперед (грн-екв). Це твій потік для реінвесту — видно, коли назбирається на наступний папір. Порожній місяць = виплат немає."],
   currency: ["Валюта: факт vs ціль", "Синій стовпчик — поточна частка валюти в портфелі, сірий — твоя цільова частка з Налаштувань. Синій нижчий за сірий → валюту треба добирати; вищий → уже перебір."],
   capital: ["Крива капіталу", "Проєкція капіталу на 1/3/5/10 років. Сіра лінія — просто сума внесків без відсотків, синя — з реінвестом під дохідність портфеля. Розрив між ними — це робота складного відсотка. Модель — припущення, не гарантія."],
+  reconcile: ["Звірка рахунку", "Введи баланс, який показує брокер, — застосунок порівняє його з тим, що виходить із записів. Розбіжність майже завжди означає одне з двох: плюс — надійшло щось незаписане (поповнення або купон, що прийшов раніше за графік); мінус — витрачено щось незаписане (купівля або комісія). Кнопка створює коригуюче поповнення рівно на різницю з поміткою «звірка», щоб баланс зійшовся, а сама розбіжність лишилась видимою в історії, а не розчинилась. Рахунки брокерів роздільні, тож звіряти треба кожен окремо."],
   reinvest: ["Що купити", "Папери відранжовані за РЕАЛЬНОЮ дохідністю — тією, що лишається в сьогоднішніх гривнях після знецінення. Саме вона робить гривневі й валютні папери порівнянними: гривневий під 16% при знеціненні 6%/рік дає ~9.4% реальних, а доларовий під 4% так і лишається 4%, бо долар купівельну спроможність тримає. YTM — дохідність до погашення за ціною входу; вона вища за купонну ставку, бо купон складається всередині року. Ціни в довіднику НБУ немає, тож рахуємо «за номіналом плюс НКД» — реальна ціна в брокера може відрізнятись, і тоді дохідність теж. «mono ×3» означає, скільки таких паперів тягне баланс саме цього брокера: рахунки роздільні, і гривня на inzhur не купить папір у mono. Це інструмент для порівняння, а не порада купувати."],
   forecast: ["Скільки буде на дедлайн", "Усі три суми — на ОДНУ дату (твій дедлайн) і в гривні СЬОГОДНІШНЬОЇ купівельної спроможності, тому їх можна порівнювати між собою і з ціллю, яку ти задав сьогодні. Перемикач ₴/$ нічого не перераховує: це та сама величина, поділена на сьогоднішній курс. У доларах рядок «номінально» зникає — долар і є реальна одиниця, тож у ньому номінальна й реальна суми збігаються. Запис «₴ 16.7% → 11.0%» означає, що ставка не вічна: сьогоднішня — це факт (за нею можна купити зараз), а далі вона лінійно сповзає до довгострокової за стільки років, скільки задано в Налаштуваннях. Сценарії відрізняються трьома допущеннями, і жодне з них не чіпає сьогоднішню ставку: внеском (менший із «план vs факт» — у песимістичний, більший — в оптимістичний), ДОВГОСТРОКОВОЮ ставкою (±3 п.п.) і темпом знецінення гривні (±4 п.п.). Кожна валюта рахується окремо у своїй валюті: гривневий рукав наприкінці переводиться в сьогоднішні гроші й тому втрачає, а долар і євро купівельну спроможність тримають. Саме тому гривневий папір під 16% не завжди кращий за доларовий під 4%: при знеціненні понад ~11.5%/рік долар обганяє."],
 };
@@ -928,6 +929,67 @@ class OddInvestPanel extends HTMLElement {
       ${rows}</div>`;
   }
 
+  // Звірка: рахунок за записами проти того, що показує брокер.
+  // Коригування — звичайне поповнення з поміткою, а не окрема сутність:
+  // так розбіжність лишається видимою в історії, а не ховається.
+  _reconcileHTML() {
+    const brokers = (this._summary || {}).brokers || {};
+    const rows = Object.entries(brokers).flatMap(([b, byCur]) =>
+      Object.entries(byCur).map(([c, v]) => ({ b, c, v })));
+    if (!rows.length) return "";
+    return `<div class="card"><h2 class="h-row" style="justify-content:space-between">
+      <span>Звірка рахунку ${infoBtn("reconcile")}</span></h2>
+      <table><thead><tr><th>Брокер</th><th class="num">За записами</th>
+        <th class="num">Фактично</th><th class="num">Розбіжність</th><th></th></tr></thead>
+      <tbody>${rows.map((r) => `<tr data-rec="${esc(r.b)}|${esc(r.c)}">
+        <td>${esc(r.b)} ${curSym(r.c)}</td>
+        <td class="num">${fmtCur(r.v, curSym(r.c))}</td>
+        <td class="num"><input class="recAct" inputmode="decimal" style="width:110px;text-align:right"
+          data-expected="${r.v}" placeholder="—"></td>
+        <td class="num recDiff muted">—</td>
+        <td class="num"><button class="recFix" disabled>виправити</button></td>
+      </tr>`).join("")}</tbody></table></div>`;
+  }
+
+  _wireReconcile(main) {
+    main.querySelectorAll("tr[data-rec]").forEach((tr) => {
+      const inp = tr.querySelector(".recAct");
+      const out = tr.querySelector(".recDiff");
+      const btn = tr.querySelector(".recFix");
+      const [broker, currency] = tr.dataset.rec.split("|");
+      const recalc = () => {
+        const raw = inp.value.trim().replace(/\s/g, "").replace(",", ".");
+        const actual = Number(raw);
+        if (!raw || Number.isNaN(actual)) {
+          out.textContent = "—"; out.className = "num recDiff muted"; btn.disabled = true;
+          return null;
+        }
+        const diff = Math.round((actual - Number(inp.dataset.expected)) * 100) / 100;
+        out.textContent = diff === 0 ? "сходиться" : (diff > 0 ? "+" : "") + fmtCur(diff, curSym(currency));
+        out.className = "num recDiff" + (diff === 0 ? " ok" : "");
+        btn.disabled = diff === 0;
+        return diff;
+      };
+      inp.addEventListener("input", recalc);
+      btn.addEventListener("click", async () => {
+        const diff = recalc();
+        if (!diff) return;
+        btn.disabled = true;
+        try {
+          await this._api("POST", "deposits", {
+            amount: String(diff), currency, broker,
+            note: diff > 0 ? "звірка: незаписане надходження" : "звірка: незаписана витрата",
+          });
+          this._toast("Коригування додано");
+          await this._loadTab();
+        } catch (err) {
+          this._toast(String(err.message || err), false);
+          btn.disabled = false;
+        }
+      });
+    });
+  }
+
   async _renderAccount(main) {
     const [deposits, conversions] = await Promise.all([
       this._api("GET", "deposits").catch(() => []),
@@ -954,6 +1016,8 @@ class OddInvestPanel extends HTMLElement {
       </div>
 
       ${this._brokerBalancesHTML()}
+
+      ${this._reconcileHTML()}
 
       <div class="card">
         <h2>Додати рух</h2>
@@ -1035,6 +1099,7 @@ class OddInvestPanel extends HTMLElement {
         try { await this._api("DELETE", "conversions/" + b.dataset.delconv); this._toast("Конвертацію видалено"); this._loadTab(); }
         catch (err) { this._toast(String(err.message || err), false); }
       }));
+    this._wireReconcile(main);
   }
 
   // ---------- КАЛЕНДАР ----------
