@@ -66,6 +66,7 @@ const INFO = {
   income: ["Дохід по місяцях", "Скільки купонів і погашень надійде кожного місяця на рік наперед (грн-екв). Це твій потік для реінвесту — видно, коли назбирається на наступний папір. Порожній місяць = виплат немає."],
   currency: ["Валюта: факт vs ціль", "Синій стовпчик — поточна частка валюти в портфелі, сірий — твоя цільова частка з Налаштувань. Синій нижчий за сірий → валюту треба добирати; вищий → уже перебір."],
   capital: ["Крива капіталу", "Проєкція капіталу на 1/3/5/10 років. Сіра лінія — просто сума внесків без відсотків, синя — з реінвестом під дохідність портфеля. Розрив між ними — це робота складного відсотка. Модель — припущення, не гарантія."],
+  forecast: ["Скільки буде на дедлайн", "Усі три суми — на ОДНУ дату (твій дедлайн), тому їх можна порівнювати між собою. Відрізняються вони допущеннями, а не бажаннями: реалістичний бере плановий внесок і поточну дохідність портфеля, оптимістичний додає 3 п.п. до ставки, песимістичний — віднімає. Коли назбирається історія поповнень, межі внеску беруться з реального темпу: менший із «план vs факт» іде в песимістичний, більший — в оптимістичний. Під кожним рядком написано, з яких саме допущень він порахований. Ціль — окремий орієнтир: смужка показує, яку її частину закриває сценарій."],
 };
 const infoBtn = (k) => `<button class="info" data-info="${k}" aria-label="Як це читати" title="Як це читати">i</button>`;
 
@@ -373,47 +374,66 @@ class OddInvestPanel extends HTMLElement {
     return box("wait", "○", `Купувати ще рано — бракує ${fmtUAH(need)}${eta}`, sub);
   }
 
-  // Три цілі з датою досягнення за поточним темпом. Дата — результат
-  // симуляції, тож вона рухається разом із реальним темпом накопичення.
+  // Віяло прогнозів на дедлайн: скільки буде на одну й ту саму дату за
+  // трьох наборів допущень. Ціль — одна сума-орієнтир, з якою вони
+  // порівнюються; вона НЕ учасник віяла.
   _goalsHTML() {
     const s = this._summary || {};
-    const goals = s.goals || [];
-    if (!goals.length) {
-      return `<div class="card"><h2>Цілі</h2><div class="muted">Задай суми цілей
-        (песимістична / реалістична / оптимістична) у «Налаштуваннях» — і тут зʼявиться,
-        коли кожна буде досягнута за твоїм темпом.</div></div>`;
+    const f = s.forecast;
+    if (!f || !(f.rows || []).length) {
+      return `<div class="card"><h2>Скільки буде на дедлайн</h2><div class="muted">Задай дедлайн
+        у «Налаштуваннях» — і тут зʼявиться, скільки в тебе буде на цю дату
+        за песимістичного, реалістичного й оптимістичного сценаріїв.</div></div>`;
     }
-    const cap = (s.nominal_uah_eq || 0) + (s.account_uah || 0);
-    const rows = goals.map((g) => {
-      const pct = g.amount > 0 ? Math.min(100, (cap / g.amount) * 100) : 0;
-      let when, color = "var(--secondary-text-color)";
-      if (g.months === -1) { when = "вже досягнуто"; color = "var(--success-color,#43a047)"; }
-      else if (g.months === 0) { when = "не досягається за 60 років"; color = "var(--error-color,#db4437)"; }
-      else {
-        when = `${monthYear(g.date)} · через ${humanMonths(g.months)}`;
-        if (g.before_deadline === true) color = "var(--success-color,#43a047)";
-        else if (g.before_deadline === false) color = "var(--warning-color,#ffa600)";
-      }
-      const miss = g.before_deadline === false && g.required_monthly > 0
-        ? `<div class="muted" style="font-size:12px;margin-top:2px">пізніше дедлайну — щоб устигнути, треба ${fmtUAH(g.required_monthly)}/міс</div>` : "";
-      const fact = g.months_actual
-        ? `<div class="muted" style="font-size:12px;margin-top:2px">за фактичним темпом: ${
-            g.months_actual === -1 ? "вже досягнуто"
-            : g.months_actual === 0 ? "не досягається"
-            : `${monthYear(g.date_actual)} · через ${humanMonths(g.months_actual)}`}</div>` : "";
-      const auto = g.auto ? ` <span class="muted" style="font-size:12px">(прогноз на дедлайн)</span>` : "";
-      return `<div style="margin-bottom:12px">
-        <div style="display:flex;justify-content:space-between;align-items:baseline">
-          <span>${esc(g.label)} · <b>${fmtUAH(g.amount)}</b>${auto}</span>
-          <span style="font-size:13px;color:${color}">${when}</span>
+    const goal = f.goal_amount || 0;
+    // Спільна шкала для всіх трьох смужок — інакше вони не порівнюються.
+    // Беремо максимум із цілі та найбільшого сценарію: коли ціль далеко,
+    // вона стає правим краєм; коли сценарії її перевищують, шкала
+    // розтягується, і смужки не впираються всі в 100%.
+    const scale = Math.max(goal, ...f.rows.map((r) => r.amount || 0), 1);
+    const goalAt = goal > 0 ? Math.min(100, (goal / scale) * 100) : -1;
+    const COLOR = { optimistic: "var(--success-color,#43a047)", realistic: "var(--primary-color,#7b6cf6)",
+      pessimistic: "var(--warning-color,#ffa600)" };
+    const rows = f.rows.map((r) => {
+      const pct = Math.max(0, Math.min(100, (r.amount / scale) * 100));
+      const mark = r.key === "realistic"
+        ? ` <span class="muted" style="font-size:12px">← найімовірніше</span>` : "";
+      const share = goal > 0
+        ? `<span class="muted" style="font-size:12px">${(r.goal_pct || 0).toFixed(1)}% цілі</span>` : "";
+      return `<div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+          <span>${esc(r.label)}${mark}</span>
+          <span><b>${fmtUAH(r.amount)}</b> ${share}</span>
         </div>
-        <div class="progress" style="margin-top:6px"><span style="width:${pct}%"></span></div>
-        <div class="muted" style="font-size:12px;margin-top:2px">накопичено ${pct.toFixed(1)}%</div>
-        ${fact}${miss}</div>`;
+        <div class="progress" style="margin-top:5px;position:relative"><span style="width:${pct}%;background:${COLOR[r.key] || "var(--primary-color)"}"></span>${
+          goalAt >= 0 ? `<i style="position:absolute;top:0;bottom:0;left:calc(${goalAt}% - 1px);width:2px;background:var(--primary-text-color);opacity:.55"></i>` : ""}</div>
+        <div class="muted" style="font-size:11px;margin-top:2px">${fmtUAH(r.contrib_monthly)}/міс · ${(r.rate_pct || 0).toFixed(1)}% річних</div>
+      </div>`;
     }).join("");
-    const dl = s.settings && s.settings.goal_date
-      ? `<div class="muted" style="font-size:12px">Дедлайн: ${monthYear(s.settings.goal_date)}</div>` : "";
-    return `<div class="card"><h2>Цілі</h2>${rows}${dl}</div>`;
+
+    // Ціль: наскільки вистачає і що з цим робити.
+    let goalBlock = "";
+    if (goal > 0) {
+      const opt = f.rows.find((r) => r.key === "optimistic") || {};
+      const real = f.rows.find((r) => r.key === "realistic") || {};
+      const eta = real.goal_months === -1 ? "вже досягнуто"
+        : real.goal_months > 0 ? `${monthYear(real.goal_date)} · через ${humanMonths(real.goal_months)}`
+        : "не досягається за 60 років";
+      const short = real.amount >= goal
+        ? `<span style="color:var(--success-color,#43a047)">вистачає за реалістичного сценарію</span>`
+        : opt.amount >= goal
+          ? `<span style="color:var(--warning-color,#ffa600)">вистачає лише за оптимістичного сценарію</span>`
+          : `<span style="color:var(--error-color,#db4437)">не вистачає навіть за оптимістичного сценарію</span>`;
+      const need = f.required_monthly > 0
+        ? `<div class="muted" style="font-size:12px;margin-top:2px">щоб устигнути до дедлайну — ${fmtUAH(f.required_monthly)}/міс замість ${fmtUAH(f.contrib_plan)}/міс</div>` : "";
+      goalBlock = `<div style="border-top:1px solid var(--divider-color,#3334);padding-top:8px;margin-top:4px">
+        <div>Ціль <b>${fmtUAH(goal)}</b> — ${short}</div>
+        <div class="muted" style="font-size:12px;margin-top:2px">за реалістичного темпу: ${eta}</div>
+        ${need}</div>`;
+    }
+    const head = `<div class="muted" style="font-size:12px;margin-bottom:8px">на ${monthYear(f.date)} · через ${humanMonths(f.months)}${
+      goal > 0 ? " · вертикальна риска — ціль" : ""}</div>`;
+    return `<div class="card"><h2>Скільки буде на дедлайн ${infoBtn("forecast")}</h2>${head}${rows}${goalBlock}</div>`;
   }
 
   _paymentsPreviewHTML() {
@@ -1213,10 +1233,8 @@ class OddInvestPanel extends HTMLElement {
           <label>Цільова частка USD, %<input name="usd_target_share_pct" inputmode="decimal" value="${esc(s.usd_target_share_pct || "")}"></label>
           <label>Цільова частка EUR, %<input name="eur_target_share_pct" inputmode="decimal" value="${esc(s.eur_target_share_pct || "")}"></label>
           <label>Цільова дюрація, років<input name="target_duration_years" inputmode="decimal" placeholder="напр. 3" value="${esc(s.target_duration_years || "")}"></label>
-          <label>Ціль: песимістична, ₴<input name="goal_pessimistic_uah" inputmode="decimal" placeholder="мінімум" value="${esc(s.goal_pessimistic_uah || "")}"></label>
-          <label>Ціль: реалістична, ₴<input name="goal_realistic_uah" inputmode="decimal" placeholder="порожньо = прогноз на дедлайн" value="${esc(s.goal_realistic_uah || "")}"></label>
-          <label>Ціль: оптимістична, ₴<input name="goal_optimistic_uah" inputmode="decimal" placeholder="мрія" value="${esc(s.goal_optimistic_uah || "")}"></label>
-          <label>Дедлайн (необовʼязково)<input name="goal_date" type="date" value="${esc(s.goal_date || "")}"></label>
+          <label>Ціль, ₴<input name="goal_amount_uah" inputmode="decimal" placeholder="скільки хочу накопичити" value="${esc(s.goal_amount_uah || "")}"></label>
+          <label>Дедлайн — коли<input name="goal_date" type="date" value="${esc(s.goal_date || "")}"></label>
           <button type="submit">Зберегти</button>
         </form>
       </div>
@@ -1245,8 +1263,7 @@ class OddInvestPanel extends HTMLElement {
       // «channels» тут свідомо немає: брокерами керує окрема картка.
       const payload = {};
       for (const k of ["monthly_target_uah", "usd_target_share_pct", "eur_target_share_pct",
-        "target_duration_years", "goal_pessimistic_uah", "goal_realistic_uah",
-        "goal_optimistic_uah", "goal_date"]) {
+        "target_duration_years", "goal_amount_uah", "goal_date"]) {
         if (f.elements[k]) payload[k] = f.elements[k].value.trim();
       }
       try {
