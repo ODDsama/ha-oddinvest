@@ -490,10 +490,15 @@ class OddInvestPanel extends HTMLElement {
         : opt.amount >= goal
           ? `<span style="color:var(--warning-color,#ffa600)">вистачає лише за оптимістичного сценарію</span>`
           : `<span style="color:var(--error-color,#db4437)">не вистачає навіть за оптимістичного сценарію</span>`;
-      // План — це і є «скільки треба». Корисне порівняння тепер не
-      // «треба vs плановано», а «треба vs роблю насправді».
-      const need = f.contrib_plan > 0
-        ? `<div class="muted" style="font-size:12px;margin-top:2px">треба вносити <b>${fmtUAH(f.contrib_plan)}</b>/міс${
+      // Бекенд і панель оновлюються окремо, тож панель має читати ОБИДВА
+      // контракти. До 2026.7.66 «скільки треба» лежало в required_monthly,
+      // а contrib_plan означав ручний план; з 7.67 план виводиться з цілі
+      // й сам є відповіддю, а required_monthly зник. Якщо читати лише
+      // contrib_plan, старий бекенд віддасть ручні 5 000 ₴/міс під
+      // підписом «треба вносити» — впевнено неправильне число.
+      const needMonthly = f.required_monthly > 0 ? f.required_monthly : f.contrib_plan;
+      const need = needMonthly > 0
+        ? `<div class="muted" style="font-size:12px;margin-top:2px">треба вносити <b>${fmtUAH(needMonthly)}</b>/міс${
             actual ? ` · за фактом ${fmtUAH(actual.contrib_monthly)}/міс` : ""}</div>` : "";
       goalBlock = `<div style="border-top:1px solid var(--divider-color,#3334);padding-top:8px;margin-top:4px">
         <div>Ціль <b>${money(goal)}</b> — ${short}</div>
@@ -659,7 +664,10 @@ class OddInvestPanel extends HTMLElement {
       ${this._tile("Цей місяць", s.month_target_uah > 0 ? `${s.month_progress_pct || 0}%` : "—",
         s.month_target_uah > 0
           ? `<div class="progress"><span style="width:${Math.min(100, s.month_progress_pct || 0)}%"></span></div>
-             <div class="muted" style="font-size:12px;margin-top:4px">внесено ${fmtUAH(s.month_deposited_uah)} з ${fmtUAH(s.month_target_uah)}</div>`
+             <div class="muted" style="font-size:12px;margin-top:4px">${
+               s.month_deposited_uah === undefined
+                 ? `вкладено ${fmtUAH(s.month_invested_uah)}` // старий бекенд рахував купівлі
+                 : `внесено ${fmtUAH(s.month_deposited_uah)}`} з ${fmtUAH(s.month_target_uah)}</div>`
           : `<div class="muted" style="font-size:12px;margin-top:4px">задай ціль і дедлайн — план порахується сам</div>`)}
       ${this._tile("Наступна виплата",
         np ? `${Number(np.amount).toLocaleString("uk-UA", { minimumFractionDigits: 2 })} ${curSym(np.currency)}` : "—",
