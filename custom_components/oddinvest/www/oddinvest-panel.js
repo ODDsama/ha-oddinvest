@@ -490,8 +490,11 @@ class OddInvestPanel extends HTMLElement {
         : opt.amount >= goal
           ? `<span style="color:var(--warning-color,#ffa600)">вистачає лише за оптимістичного сценарію</span>`
           : `<span style="color:var(--error-color,#db4437)">не вистачає навіть за оптимістичного сценарію</span>`;
-      const need = f.required_monthly > 0
-        ? `<div class="muted" style="font-size:12px;margin-top:2px">щоб устигнути до дедлайну — ${fmtUAH(f.required_monthly)}/міс замість ${fmtUAH(f.contrib_plan)}/міс</div>` : "";
+      // План — це і є «скільки треба». Корисне порівняння тепер не
+      // «треба vs плановано», а «треба vs роблю насправді».
+      const need = f.contrib_plan > 0
+        ? `<div class="muted" style="font-size:12px;margin-top:2px">треба вносити <b>${fmtUAH(f.contrib_plan)}</b>/міс${
+            actual ? ` · за фактом ${fmtUAH(actual.contrib_monthly)}/міс` : ""}</div>` : "";
       goalBlock = `<div style="border-top:1px solid var(--divider-color,#3334);padding-top:8px;margin-top:4px">
         <div>Ціль <b>${money(goal)}</b> — ${short}</div>
         <div class="muted" style="font-size:12px;margin-top:2px">за реалістичного темпу: ${eta}</div>
@@ -653,9 +656,11 @@ class OddInvestPanel extends HTMLElement {
     const tiles = `<div class="tiles" style="margin:0 0 12px;padding:0">
       ${this._tile("Капітал", fmtUAH(cap),
         accrued > 0 ? `<div class="muted" style="font-size:12px;margin-top:4px">+ ${fmtUAH(accrued)} НКД зароблено</div>` : "")}
-      ${this._tile("Цей місяць", `${s.month_progress_pct || 0}%`,
-        `<div class="progress"><span style="width:${Math.min(100, s.month_progress_pct || 0)}%"></span></div>
-         <div class="muted" style="font-size:12px;margin-top:4px">${fmtUAH(s.month_invested_uah)} з ${fmtUAH(s.month_target_uah)}</div>`)}
+      ${this._tile("Цей місяць", s.month_target_uah > 0 ? `${s.month_progress_pct || 0}%` : "—",
+        s.month_target_uah > 0
+          ? `<div class="progress"><span style="width:${Math.min(100, s.month_progress_pct || 0)}%"></span></div>
+             <div class="muted" style="font-size:12px;margin-top:4px">внесено ${fmtUAH(s.month_deposited_uah)} з ${fmtUAH(s.month_target_uah)}</div>`
+          : `<div class="muted" style="font-size:12px;margin-top:4px">задай ціль і дедлайн — план порахується сам</div>`)}
       ${this._tile("Наступна виплата",
         np ? `${Number(np.amount).toLocaleString("uk-UA", { minimumFractionDigits: 2 })} ${curSym(np.currency)}` : "—",
         np ? `<div class="muted" style="font-size:12px;margin-top:4px">${dayMonth(np.date)}</div>` : "")}
@@ -1411,7 +1416,6 @@ class OddInvestPanel extends HTMLElement {
       <div class="card">
         <h2>Налаштування</h2>
         <form id="setForm">
-          <label>Ціль на місяць, ₴<input name="monthly_target_uah" inputmode="decimal" value="${esc(s.monthly_target_uah || "")}"></label>
           <label>Цільова частка USD, %<input name="usd_target_share_pct" inputmode="decimal" value="${esc(s.usd_target_share_pct || "")}"></label>
           <label>Цільова частка EUR, %<input name="eur_target_share_pct" inputmode="decimal" value="${esc(s.eur_target_share_pct || "")}"></label>
           <label>Ціль, ₴<input name="goal_amount_uah" inputmode="decimal" placeholder="скільки хочу накопичити" value="${esc(s.goal_amount_uah || "")}"></label>
@@ -1446,7 +1450,7 @@ class OddInvestPanel extends HTMLElement {
       // значення, яке затерло б налаштування (PUT часткове).
       // «channels» тут свідомо немає: брокерами керує окрема картка.
       const payload = {};
-      for (const k of ["monthly_target_uah", "usd_target_share_pct", "eur_target_share_pct",
+      for (const k of ["usd_target_share_pct", "eur_target_share_pct",
         "goal_amount_uah", "goal_date",
         "uah_devaluation_pct", "terminal_rate_pct", "rate_glide_years"]) {
         if (f.elements[k]) payload[k] = f.elements[k].value.trim();
