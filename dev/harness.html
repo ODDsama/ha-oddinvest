@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ODD Invest — стенд панелі</title>
+<!--
+  Стенд для панелі HA без самого Home Assistant і без бекенда.
+
+  Навіщо: панель живе в проді, а помилка в рендері дає порожню сторінку
+  без явного сліду в логах HA. Ганяти кожну правку через «перезавантаж
+  інтеграцію й подивись» — надто повільна й надто дорога петля.
+
+  Що робить: підставляє панелі об'єкт hass із власним fetchWithAuth, який
+  віддає фікстуру контракту (contract/fixtures/basic.json з репозиторію
+  oddinvest) замість /api/oddinvest/summary і правдоподібні заглушки на
+  решту маршрутів. Цього досить, щоб намалювались усі вкладки.
+
+  Запуск (з кореня робочої копії, де поруч лежать oddinvest і ha-oddinvest):
+      python3 -m http.server 8099
+  далі відкрити http://localhost:8099/ha-oddinvest/dev/harness.html
+
+  Це НЕ тест: він не перевіряє числа. Він ловить те, що ламає сторінку —
+  помилки імпорту, звернення до неоголошеного, розсипану верстку.
+-->
+<style>
+  /* Змінні теми Home Assistant. Поза HA їх немає, а theme-ha.css саме на
+     них і стоїть — без цього блока стенд показував би текст без кольору
+     і брехав про контраст. Значення — з дефолтних тем HA.
+
+     Дві теми тут не для краси: панель зобов'язана читатись і на світлій,
+     і на темній, а половина проблем контрасту видно лише на одній із
+     них. Перемикач — кнопкою вгорі. */
+  :root, :root[data-ha-theme="light"] {
+    --primary-background-color: #fafafa;
+    --card-background-color: #ffffff;
+    --secondary-background-color: #e5e5e5;
+    --primary-text-color: #212121;
+    --secondary-text-color: #727272;
+    --divider-color: rgba(0, 0, 0, .12);
+    --primary-color: #03a9f4;
+    --app-header-background-color: var(--primary-color);
+    --app-header-text-color: #fff;
+    --success-color: #43a047;
+    --warning-color: #ffa600;
+    --error-color: #db4437;
+    --info-color: #039be5;
+    --ha-card-box-shadow: 0 2px 2px 0 rgba(0, 0, 0, .14);
+  }
+  :root[data-ha-theme="dark"] {
+    --primary-background-color: #111111;
+    --card-background-color: #1c1c1c;
+    --secondary-background-color: #202020;
+    --primary-text-color: #e1e1e1;
+    --secondary-text-color: #9b9b9b;
+    --divider-color: rgba(225, 225, 225, .12);
+    --primary-color: #03a9f4;
+    --ha-card-box-shadow: none;
+  }
+
+  html, body { margin: 0; height: 100%; background: var(--primary-background-color); }
+  #theme {
+    position: fixed; top: 8px; right: 8px; z-index: 1000;
+    font: 12px/1 system-ui, sans-serif; padding: 6px 10px; cursor: pointer;
+    border: 1px solid #8888; border-radius: 6px; background: #8883; color: inherit;
+  }
+  #err {
+    position: fixed; inset: auto 0 0 0; z-index: 999; max-height: 45vh; overflow: auto;
+    background: #400; color: #fdd; font: 12px/1.5 ui-monospace, monospace; padding: 10px 14px;
+    white-space: pre-wrap; display: none;
+  }
+  #err.show { display: block; }
+</style>
+</head>
+<body>
+<button id="theme">тема: світла</button>
+<div id="err"></div>
+<script type="module">
+{
+  const btn = document.getElementById("theme");
+  const apply = (t) => {
+    document.documentElement.dataset.haTheme = t;
+    btn.textContent = "тема: " + (t === "dark" ? "темна" : "світла");
+    try { localStorage.setItem("oddinvest.devTheme", t); } catch (_) {}
+  };
+  let cur;
+  try { cur = localStorage.getItem("oddinvest.devTheme"); } catch (_) {}
+  apply(cur === "dark" ? "dark" : "light");
+  btn.addEventListener("click", () =>
+    apply(document.documentElement.dataset.haTheme === "dark" ? "light" : "dark"));
+}
+
+// Будь-яка помилка має бути ВИДНОЮ, а не лише в консолі: половина сенсу
+// стенда в тому, щоб зловити її оком з першого погляду.
+const errBox = document.getElementById("err");
+const showErr = (what) => {
+  errBox.textContent += what + "\n\n";
+  errBox.classList.add("show");
+};
+window.addEventListener("error", (e) => showErr(`${e.message}\n${e.filename}:${e.lineno}`));
+window.addEventListener("unhandledrejection", (e) => showErr("unhandled: " + (e.reason?.stack || e.reason)));
+
+const FIXTURE = "../../oddinvest/contract/fixtures/basic.json";
+
+// Заглушки під усе, що панель питає окрім summary. Форми — з реальних
+// відповідей бекенда; значення мінімальні, але не порожні там, де
+// порожнеча ховала б цілий блок.
+const MOCK = {
+  brokers: [{ id: 1, name: "mono" }, { id: 2, name: "inzhur" }],
+  "fund-catalog": [{ id: 1, name: "Inzhur OFFICE", currency: "UAH" }],
+  reinvest: [{
+    isin: "UA4000227748", currency: "UAH", maturity: "2027-03-17",
+    ytm_pct: 16.4, real_pct: 9.8, cost_per_bond: { amount: "1050.00", currency: "UAH" },
+    brokers: [{ broker: "mono", qty: 2 }], reason: "закриває дірку 2027 року",
+  }],
+  positions: [{
+    isin: "UA4000227748", qty: 100,
+    invested: { amount: "100000.00", currency: "UAH" },
+    nominal: { amount: "100000.00", currency: "UAH" },
+    maturity: "2027-03-17", days_to_maturity: 238,
+    next_pay_date: "2026-07-20", next_pay_amount: { amount: "4137.50", currency: "UAH" },
+  }],
+  lots: [{
+    id: 1, isin: "UA4000227748", qty: 100, remaining: 100,
+    price_per_bond: { amount: "1000.00", currency: "UAH" },
+    fee: { amount: "0.00", currency: "UAH" }, buy_date: "2026-01-15", channel: "mono",
+  }],
+  sales: [],
+  funds: [{
+    id: 1, kind: "buy", fund: "Inzhur OFFICE", qty: 500, date: "2026-06-01",
+    amount: { amount: "5000.00", currency: "UAH" }, broker: "inzhur", note: "",
+  }],
+  deposits: [{ id: 1, date: "2026-07-01", amount: { amount: "4500.00", currency: "UAH" }, note: "зарплата" }],
+  conversions: [],
+  snapshots: [
+    { date: "2026-07-13", invested_uah: 130000, nominal_uah_eq: 131000, account_uah: 500, usd_share_pct: 60, uninvested_uah: 0, month_target_uah: 5000, funds_uah: 4800 },
+    { date: "2026-07-14", invested_uah: 133000, nominal_uah_eq: 134500, account_uah: 900, usd_share_pct: 62, uninvested_uah: 0, month_target_uah: 5000, funds_uah: 4900 },
+    { date: "2026-07-15", invested_uah: 137305, nominal_uah_eq: 138246, account_uah: 1200, usd_share_pct: 63.8, uninvested_uah: 0, month_target_uah: 5000, funds_uah: 5000 },
+  ],
+  "bonds/search": [],
+};
+
+async function summary() {
+  const r = await fetch(FIXTURE);
+  if (!r.ok) throw new Error(`фікстура не знайшлась (${r.status}) — стенд запускають з кореня робочої копії`);
+  const doc = await r.json();
+  // Фікстура — це документ MQTT-стану; кілька полів, які додає саме REST
+  // /api/summary, дописуємо тут, інакше половина карток мовчить.
+  return {
+    ...doc,
+    account_uah: 1200,
+    accounts: { UAH: 1200 },
+    reinvest_min_uah: 1050,
+    reinvest_min: { UAH: 1050 },
+    brokers: { mono: { UAH: 1200 }, inzhur: { UAH: 0 } },
+    invested_by_broker: { mono: 100000, inzhur: 37305 },
+    funds_uah: 5000,
+    funds: [{
+      fund: "Inzhur OFFICE", currency: "UAH", qty: 500, cost_basis: 5000,
+      last_price: 10.4, last_price_date: "2026-07-10", market_value: 5200,
+      dividends_net: 163.3, dividends_tax: 26.6, yield_net_pct: 8.2,
+    }],
+    nbu_refreshed_at: new Date().toISOString(),
+
+    // Фікстура — документ MQTT-стану на мінімальному портфелі, тож
+    // половини полів у ній просто немає, і картки, що з них живуть,
+    // мовчать. Дописуємо їх тут: стенд має показувати РОЗДІЛ ЦІЛКОМ,
+    // інакше він перевіряє лише те, що й так видно.
+    ladder_uah: [{ year: 2027, uah: 100000 }, { year: 2028, uah: 0 }, { year: 2029, uah: 40000 }],
+    income_12m: Array.from({ length: 12 }, (_, i) => ({
+      month: `2026-${String(((6 + i) % 12) + 1).padStart(2, "0")}`,
+      amount: i % 3 === 0 ? 0 : 1200 + i * 180,
+    })),
+    coupons_12m: [],
+    income_monthly_now: 1450,
+    accrued_uah: 830.5,
+    portfolio_yield: { UAH: 16.4, USD: 4.1 },
+    portfolio_yield_pct: 12.8,
+    funds_yield_pct: 8.2,
+    blended_yield_pct: 12.1,
+    actual_monthly_uah: 4100,
+    actual_months: 7,
+    projection: [1, 3, 5, 10].map((y) => ({
+      years: y, contributed: 140000 + y * 54000, with_reinvest: 145000 + y * 68000,
+      with_reinvest_actual: 143000 + y * 61000,
+      income_monthly: 1450 + y * 900, income_monthly_actual: 1400 + y * 800,
+    })),
+    projection_rate_pct: 15.7,
+    rebalance: [{
+      currency: "USD", target_pct: 50, current_pct: 63.8, deficit_uah: 0,
+      deficit_native: 0, cash_native: 0, bond_cost_native: 1000, bond_cost_uah: 42000,
+      can_buy: 0, convert_uah: 0, min_portfolio_uah: 84000, feasible: true,
+    }],
+    rate_risk: {
+      duration_years: 1.8, modified_dur: 1.55, pv_uah: 138000,
+      scenarios: [
+        { delta_pp: -2, change_pct: 3.1, change_uah: 4278 },
+        { delta_pp: 2, change_pct: -3.1, change_uah: -4278 },
+      ],
+    },
+    forecast: {
+      date: "2031-01-01", months: 54, goal_amount: 2000000, contrib_plan: 30000,
+      rate0_usd: 42, glide_years: 5,
+      rows: [
+        { key: "optimistic", label: "Оптимістично", amount: 2100000, required_monthly: 26000,
+          rate_pct: 16.5, rate_terminal_pct: 13, contrib_monthly: 26000, devaluation_pct: 4,
+          by_currency: [{ currency: "UAH", rate_pct: 16.5, rate_terminal_pct: 13, contrib_monthly: 16000, amount: 1200000 },
+                        { currency: "USD", rate_pct: 4.2, contrib_monthly: 10000, amount: 21000 }] },
+        { key: "realistic", label: "Реалістично", amount: 2000000, required_monthly: 31000,
+          rate_pct: 15.7, rate_terminal_pct: 11, contrib_monthly: 31000, devaluation_pct: 6,
+          by_currency: [{ currency: "UAH", rate_pct: 15.7, rate_terminal_pct: 11, contrib_monthly: 19000, amount: 1150000 },
+                        { currency: "USD", rate_pct: 4.0, contrib_monthly: 12000, amount: 20000 }] },
+        { key: "pessimistic", label: "Песимістично", amount: 1900000, required_monthly: 37000,
+          rate_pct: 14.0, rate_terminal_pct: 9, contrib_monthly: 37000, devaluation_pct: 9,
+          by_currency: [{ currency: "UAH", rate_pct: 14, rate_terminal_pct: 9, contrib_monthly: 23000, amount: 1100000 },
+                        { currency: "USD", rate_pct: 3.8, contrib_monthly: 14000, amount: 19000 }] },
+        { key: "actual", label: "За фактом", amount: 1400000, contrib_monthly: 4100,
+          rate_pct: 15.7, devaluation_pct: 6, goal_pct: 70, goal_months: 96, goal_date: "2034-07-01" },
+      ],
+    },
+  };
+}
+
+function body(path) {
+  const key = path.split("?")[0].replace(/\/$/, "");
+  if (key === "summary") return summary();
+  if (key in MOCK) return Promise.resolve(MOCK[key]);
+  if (key === "settings") return Promise.resolve({ usd_target_share_pct: 50, goal_date: "2031-01-01" });
+  if (key === "calendar") return Promise.resolve([
+    { date: "2026-07-20", isin: "UA4000227748", type: 1, amount: { amount: "4137.50", currency: "UAH" }, status: "" },
+  ]);
+  // Невідомий маршрут — це або новий виклик, який забули додати сюди,
+  // або друкарська помилка. Тихо віддавати [] означало б сховати друге.
+  showErr(`стенд не знає маршруту: ${path}`);
+  return Promise.resolve([]);
+}
+
+async function respond(path, opts) {
+  if ((opts.method || "GET") !== "GET") {
+    return new Response(null, { status: 204 });   // запис — приймаємо мовчки
+  }
+  return new Response(JSON.stringify(await body(path)), {
+    status: 200, headers: { "content-type": "application/json" },
+  });
+}
+
+// Дві поверхні монтують той самий компонент і мають перевірятись обидві:
+//   ?surface=panel (типово) — вендорена копія в custom_components, як у HA;
+//   ?surface=web            — джерело в репозиторії oddinvest, як віддає Go.
+// Різниця тільки в транспорті й темі — рівно те, що й має відрізнятись.
+const surface = new URLSearchParams(location.search).get("surface") || "panel";
+
+if (surface === "web") {
+  const realFetch = window.fetch.bind(window);
+  window.fetch = (url, opts = {}) => {
+    const u = String(url);
+    return u.startsWith("/api/")
+      ? respond(u.slice("/api/".length), opts)
+      : realFetch(url, opts);
+  };
+  const { httpTransport } = await import("../../oddinvest/internal/api/web/js/transport.js");
+  await import("../../oddinvest/internal/api/web/js/app.js");
+  const app = document.createElement("odd-invest-app");
+  document.body.appendChild(app);
+  app.theme = "web";
+  app.transport = httpTransport();
+} else {
+  await import("../custom_components/oddinvest/www/oddinvest-panel.js");
+  const panel = document.createElement("odd-invest-panel");
+  document.body.appendChild(panel);
+  panel.hass = { fetchWithAuth: (url, opts = {}) => respond(url.replace(/^\/api\/oddinvest\//, ""), opts) };
+}
+</script>
+</body>
+</html>

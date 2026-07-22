@@ -26,6 +26,18 @@ jobs:
       - run: pip install pytest jsonschema
       - run: pytest -q
 
+  ui-drift:
+    name: спільний UI не розійшовся з oddinvest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # www/shared/ — вендор із репозиторію oddinvest: панель і веб-UI
+      # бекенда це один компонент, і копія тут потрібна лише для того, щоб
+      # інтеграція лишалась самодостатньою (HACS ставить її окремо).
+      # Розбіжність має падати гучно: мовчазний вендор — це та сама пара
+      # незалежних реалізацій, від якої ми й пішли.
+      - run: sh scripts/sync-ui.sh --check
+
   hassfest:
     runs-on: ubuntu-latest
     steps:

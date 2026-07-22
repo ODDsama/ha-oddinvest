@@ -28,7 +28,11 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 PANEL_URL_PATH = "odd-invest"
-JS_URL = "/oddinvest_static/oddinvest-panel.js"
+# Під цим префіксом монтується каталог www/ — з версією між ним і файлом:
+# /oddinvest_static/<version>/oddinvest-panel.js
+#                            /shared/js/app.js
+#                            /shared/css/base.css
+STATIC_BASE = "/oddinvest_static"
 _SETUP_FLAG = f"{DOMAIN}_panel_ready"
 
 
@@ -93,23 +97,41 @@ class OddInvestProxyView(HomeAssistantView):
         return await self._forward(request, path, "DELETE")
 
 
-async def async_setup_panel(hass: HomeAssistant) -> None:
-    """В'юшка-проксі, статика JS і панель.
+def _www_version(www_dir: pathlib.Path) -> int:
+    """Найсвіжіший mtime серед файлів панелі.
 
-    Cache-bust прив'язаний до mtime файла, а не до часу старту HA: інакше
-    оновлений JS лишався за старою адресою, браузер віддавав закешований
-    модуль, і зміни не з'являлись навіть після Ctrl+Shift+R. Тепер новий
-    файл = нова адреса, тож досить перезавантажити інтеграцію.
+    Саме серед УСІХ, а не лише самого oddinvest-panel.js: він тепер лише
+    тонкий адаптер, а весь застосунок лежить у www/shared/. Версія за
+    одним файлом не змінювалась би при оновленні спільного коду — тобто
+    рівно тоді, коли змінюється майже все.
     """
-    js_file = pathlib.Path(__file__).parent / "www" / "oddinvest-panel.js"
+    newest = 0
     try:
-        version = int(js_file.stat().st_mtime)
+        for path in www_dir.rglob("*"):
+            if path.is_file():
+                newest = max(newest, int(path.stat().st_mtime))
     except OSError:
-        version = int(time.time())
-    module_url = f"{JS_URL}?v={version}"
+        pass
+    return newest or int(time.time())
+
+
+async def async_setup_panel(hass: HomeAssistant) -> None:
+    """В'юшка-проксі, статика панелі й сама панель.
+
+    Cache-bust — версійним ПРЕФІКСОМ шляху, а не параметром `?v=`.
+    Раніше вистачало параметра, бо файл був один. Тепер панель — це дерево
+    ES-модулів, які тягнуть одне одного відносними шляхами
+    (`./shared/js/app.js`), а відносний імпорт запит-параметр не успадковує:
+    сам вхідний файл приїхав би свіжий, а всі його імпорти — зі старого
+    кешу. Версія в префіксі змінює адресу цілому дереву разом.
+    """
+    www_dir = pathlib.Path(__file__).parent / "www"
+    version = _www_version(www_dir)
+    static_root = f"{STATIC_BASE}/{version}"
+    module_url = f"{static_root}/oddinvest-panel.js"
 
     if hass.data.get(_SETUP_FLAG) == module_url:
-        return  # той самий файл — перереєстрація нічого не змінить
+        return  # нічого не змінилось — перереєстрація нічого не дасть
 
     # view і статику реєструємо толерантно — щоб повторна спроба після
     # невдачі не падала на «вже зареєстровано».
@@ -118,12 +140,23 @@ async def async_setup_panel(hass: HomeAssistant) -> None:
     except Exception:  # noqa: BLE001
         _LOGGER.debug("proxy view вже зареєстрована")
 
+    # Каталог, а не файл: під цим префіксом мають віддаватись і сам
+    # адаптер, і все дерево shared/ (js/ та css/).
+    #
+    # Помилку не ковтаємо мовчки. Раніше сюди потрапляла хіба що повторна
+    # реєстрація того самого шляху, і debug-рядка вистачало. Тепер від цієї
+    # реєстрації залежить УВЕСЬ застосунок: якщо каталог не змонтувався,
+    # браузер отримає 404 на ./shared/js/app.js, і панель буде просто
+    # порожньою — без сліду в логах, за яким це можна знайти.
     try:
         await hass.http.async_register_static_paths(
-            [StaticPathConfig(JS_URL, str(js_file), False)]
+            [StaticPathConfig(static_root, str(www_dir), False)]
         )
-    except Exception:  # noqa: BLE001
-        _LOGGER.debug("static path вже зареєстрований")
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.warning(
+            "не вдалось змонтувати %s -> %s: %s. Якщо панель порожня — причина тут",
+            static_root, www_dir, err,
+        )
 
     # Панель уже могла бути зареєстрована зі старою адресою — знімаємо,
     # інакше async_register_panel впаде на дублікаті.

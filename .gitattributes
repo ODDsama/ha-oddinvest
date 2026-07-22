@@ -1,0 +1,11 @@
+# Кінці рядків — LF скрізь, незалежно від платформи.
+#
+# Критично для custom_components/oddinvest/www/shared/: це вендор із
+# репозиторію oddinvest, і CI звіряє його з оригіналом за sha256. CRLF у
+# робочій копії на Windows зробив би «розбіжність» там, де файл не
+# змінювався.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.xlsx binary
