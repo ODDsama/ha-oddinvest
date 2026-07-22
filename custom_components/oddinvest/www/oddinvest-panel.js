@@ -78,7 +78,7 @@ const INFO = {
   import: ["Імпорт виписки", "Виписка Inzhur у .xlsx. Спершу «Переглянути» — застосунок покаже, що саме додасть, і нічого не запише. Рядки, які вже є в базі, позначені: щомісячна виписка містить і старі операції, тож повторний імпорт нічого не подвоює. Окремо позначаються КОНФЛІКТИ — коли та сама сума вже лежить у гаманці ручним рухом: доки обліку фондів не було, купівлі сертифікатів доводилось записувати як зняття, і тепер така пара порахувалась би двічі; такий ручний запис треба спершу видалити в «Рухах» нижче. Облігації імпорт свідомо пропускає — їх ти вносиш вручну. Жоден рядок не зникає мовчки: усе, що не імпортовано, показано з причиною."],
   reconcile: ["Звірка рахунку", "Введи баланс, який показує брокер, — застосунок порівняє його з тим, що виходить із записів. Розбіжність майже завжди означає одне з двох: плюс — надійшло щось незаписане (поповнення або купон, що прийшов раніше за графік); мінус — витрачено щось незаписане (купівля або комісія). Кнопка створює коригуюче поповнення рівно на різницю з поміткою «звірка», щоб баланс зійшовся, а сама розбіжність лишилась видимою в історії, а не розчинилась. Рахунки брокерів роздільні, тож звіряти треба кожен окремо."],
   funds: ["Сертифікати фондів", "Сертифікати фондів — інший інструмент, ніж ОВДП: немає ні погашення, ні номіналу, ні графіка купонів, зате є ринкова ціна й нерегулярні дивіденди. Ціна береться з останньої твоєї операції — виписка приносить її з собою, тож окреме джерело котирувань не потрібне; між виписками вона застаріває, і дата поруч це показує. Дохідність — ПІСЛЯ податку: дивіденд фонду оподатковується (зараз 14%: ПДФО 9% + військовий збір 5%), а купон ОВДП звільнений, тож до податку порівнювати їх означало б давати фонду фору. «Результат» — прибуток від уже закритих продажів за вирахуванням собівартості й податку."],
-  fundops: ["Сертифікати фондів", "Розкладено так само, як облігації: позиції, лоти, продажі — плюс дивіденди, яких у ОВДП немає. Позиція — це стан фонду, а не окрема покупка: сертифікат безстроковий, партії розрізняти нема потреби, тож собівартість середньозважена, і продаж зменшує її пропорційно проданій частці. «Ціна» — з останньої твоєї операції (виписка приносить її з собою), тож між виписками вона старіє, і дата поруч це показує. «Прибуток» — паперовий, різниця ринкової вартості й вкладеного; окремо йде результат уже закритих продажів. «Дохідність» — дивіденди за 365 днів ПІСЛЯ податку до ринкової вартості: дивіденд фонду оподатковується (зараз 14%: ПДФО 9% + військовий збір 5%), а купон ОВДП звільнений, тож до податку порівнювати їх означало б давати фонду фору. Суми всюди ДОДАТНІ, напрямок задає сам розділ: купівля забирає гроші з рахунку брокера, продаж і дивіденд приносять. Податок ставиться окремо (для дивіденда це утримане при виплаті, для продажу — сплачене з прибутку). Імпорт виписки Inzhur пише в ці самі таблиці, тож дублікат видаляється звідси, а операцію, якої у виписці не було, тут же й дописуєш."],
+  fundops: ["Сертифікати фондів", "Розкладено так само, як облігації: позиції, лоти, продажі — плюс дивіденди, яких у ОВДП немає. Позиція — це стан фонду, а не окрема покупка: сертифікат безстроковий, партії розрізняти нема потреби, тож собівартість середньозважена, і продаж зменшує її пропорційно проданій частці. «Ціна» — з останньої твоєї операції (виписка приносить її з собою), тож між виписками вона старіє, і дата поруч це показує. «Прибуток» — паперовий, різниця ринкової вартості й вкладеного; окремо йде результат уже закритих продажів. «Дохідність» — річна: остання виплата ПІСЛЯ податку, помножена на ритм виплат (щомісячний фонд — на 12, щоквартальний — на 4; ритм береться з фактичних проміжків, а не з припущення). Саме остання, а не сума за рік: сума міряла б не папір, а те, скільки історії встигло накопичитись — щойно куплений фонд показував би чверть своєї дохідності просто тому, що не встиг заплатити дванадцять разів. Після податку, бо дивіденд фонду оподатковується (зараз 14%: ПДФО 9% + військовий збір 5%), а купон ОВДП звільнений, і до податку порівнювати їх означало б давати фонду фору. Суми всюди ДОДАТНІ, напрямок задає сам розділ: купівля забирає гроші з рахунку брокера, продаж і дивіденд приносять. Податок ставиться окремо (для дивіденда це утримане при виплаті, для продажу — сплачене з прибутку). Імпорт виписки Inzhur пише в ці самі таблиці, тож дублікат видаляється звідси, а операцію, якої у виписці не було, тут же й дописуєш."],
   income: ["Пасивний дохід", "Скільки папери приноситимуть ЩОМІСЯЦЯ — тобто потік, який можна забирати, не проїдаючи тіло. Погашення сюди не входять: повернення номіналу це твої ж гроші, а не дохід. «Зараз» — середній купон за наступні 12 місяців із реального графіка виплат. Далі — симуляція: капітал на кожному горизонті помножений на ставку, під яку він працює на той момент (а вона сповзає до довгострокової). Усе в гривні сьогоднішньої купівельної спроможності, тож числа можна порівнювати з сьогоднішніми витратами. Рядок «за фактом» рахується від твого справжнього темпу поповнень, а не від плану."],
   reinvest: ["Що купити", "Папери відранжовані за РЕАЛЬНОЮ дохідністю — тією, що лишається в сьогоднішніх гривнях після знецінення. Саме вона робить гривневі й валютні папери порівнянними: гривневий під 16% при знеціненні 6%/рік дає ~9.4% реальних, а доларовий під 4% так і лишається 4%, бо долар купівельну спроможність тримає. YTM — дохідність до погашення за ціною входу; вона вища за купонну ставку, бо купон складається всередині року. Ціни в довіднику НБУ немає, тож рахуємо «за номіналом плюс НКД» — реальна ціна в брокера може відрізнятись, і тоді дохідність теж. «mono ×3» означає, скільки таких паперів тягне баланс саме цього брокера: рахунки роздільні, і гривня на inzhur не купить папір у mono. Це інструмент для порівняння, а не порада купувати."],
   forecast: ["Скільки треба вносити", "Головне число рядка — скільки треба вносити щомісяця, щоб дійти до цілі саме за цих допущень. Платіж під ціль один, але ринок вирішує, наскільки він посильний: за кращих ставок і слабшого знецінення ціль коштує дешевше, за гірших — дорожче. Саме тому віяло розкидає ПЛАТІЖ, а не суму на дедлайн: щойно внесок підбирається під ціль, сума на дедлайн у всіх трьох сценаріях однакова — це і є ціль. Рядок «За фактом» показує твій справжній темп поповнень і яку частку потрібного він покриває, а також скільки за ним вийде на дедлайн — там сума вже несе новину. Внески завжди в гривні, навіть у доларовому вигляді: відкладаєш ти гривні. Запис «₴ 15.7% → 11.0%» означає, що ставка не вічна: сьогоднішня це факт, далі вона лінійно сповзає до довгострокової. Кожна валюта рахується окремо у своїй валюті: гривневий рукав наприкінці переводиться в сьогоднішні гроші й тому втрачає, а долар і євро купівельну спроможність тримають."],
@@ -351,8 +351,16 @@ class OddInvestPanel extends HTMLElement {
 
   // ---------- дані зведення (без рендеру: плитки живуть у розділах) ----------
   async _loadSummaryData() {
-    const s = await this._api("GET", "summary");
+    // Довідники тягнемо разом зі зведенням: випадайки брокерів малюються
+    // в кожному розділі, тож на момент рендеру список має вже бути.
+    const [s, brokers, funds] = await Promise.all([
+      this._api("GET", "summary"),
+      this._api("GET", "brokers").catch(() => []),
+      this._api("GET", "fund-catalog").catch(() => []),
+    ]);
     this._summary = s;
+    this._brokers = brokers || [];
+    this._fundCatalog = funds || [];
     const avail = this.shadowRoot.getElementById("avail");
     avail.textContent = s.generated_at ? "стан на " + new Date(s.generated_at).toLocaleString("uk-UA") : "";
   }
@@ -773,12 +781,12 @@ class OddInvestPanel extends HTMLElement {
   }
 
   // ---------- ПОРТФЕЛЬ ----------
-  // Брокери: задані в Налаштуваннях ∪ ті, що вже зустрічались у лотах і
-  // балансах. Новий брокер доступний ще до першої покупки, старі не губляться.
+  // Брокери: з довідника ∪ ті, що вже зустрічались у лотах і балансах.
+  // Довідник міг відстати, а випадайка без брокера власного лота гірша за
+  // зайвий рядок у списку.
   _brokerList(lots) {
     const s = this._summary || {};
-    const set = new Set(String((s.settings || {}).channels || "")
-      .split(",").map((c) => c.trim()).filter(Boolean));
+    const set = new Set((this._brokers || []).map((b) => b.name));
     Object.keys(s.brokers || {}).forEach((b) => { if (b && b !== "—") set.add(b); });
     (lots || []).forEach((l) => { if (l.channel) set.add(String(l.channel).trim()); });
     return [...set].sort((a, b) => a.localeCompare(b, "uk"));
@@ -1022,7 +1030,14 @@ class OddInvestPanel extends HTMLElement {
   // прихований id перемикає POST на PUT, і другого набору полів не треба.
   _fundOpsHTML() {
     const ops = this._fundOps || [];
-    const funds = (this._summary || {}).funds || [];
+    // Закритий фонд — не позиція: показувати «0 серт.» означає питати про
+    // те, чого вже немає. Його купівлі, продажі й дивіденди лишаються в
+    // таблицях нижче — історія записів нікуди не зникає.
+    //
+    // Виняток — фонд із дірою в журналі: він лишається на видноті саме
+    // тому, що його числа неправильні, і сховати його означало б
+    // повторити ту помилку, з якої все й почалось.
+    const funds = ((this._summary || {}).funds || []).filter((f) => f.qty > 0 || f.short > 0);
     if (!ops.length && !funds.length) return "";
     // Підказка фондів — з уже записаних операцій: назва має збігатися
     // символ у символ, інакше один фонд розпадеться на дві позиції.
@@ -1062,7 +1077,10 @@ class OddInvestPanel extends HTMLElement {
       ${funds.map((f) => {
         const pnl = f.market_value - f.cost_basis;
         const col = pnl >= 0 ? "var(--success-color,#43a047)" : "var(--error-color,#db4437)";
-        return `<tr><td><b>${esc(f.fund)}</b></td><td class="num">${f.qty}</td>
+        const short = f.short > 0
+          ? `<div style="color:var(--warning-color,#ffa600);font-size:11px">⚠ продано на ${f.short} серт. більше,
+             ніж куплено — у журналі бракує надходження, і числа рядка занижені</div>` : "";
+        return `<tr><td><b>${esc(f.fund)}</b>${short}</td><td class="num">${f.qty}</td>
           <td class="num">${(f.last_price || 0).toFixed(4)} ${curSym(f.currency)}${
             f.last_price_date ? `<div class="muted" style="font-size:11px">${dayMonth(f.last_price_date)}</div>` : ""}</td>
           <td class="num">${fmtUAH(f.market_value)}</td><td class="num">${fmtUAH(f.cost_basis)}</td>
@@ -1765,7 +1783,7 @@ class OddInvestPanel extends HTMLElement {
         </form>
       </div>
 
-      ${this._brokerManagerHTML(s)}
+      ${this._catalogsHTML()}
 
       <div class="card">
         <h2>Бекап</h2>
@@ -1800,58 +1818,92 @@ class OddInvestPanel extends HTMLElement {
     });
   }
 
-  // Брокери — окремий керований список. Зберігаємо в тому ж налаштуванні
-  // channels (через кому), але UI — повноцінний CRUD. Видалення прибирає
-  // брокера лише зі списку-підказки: наявні лоти й баланси його не
-  // втрачають (там брокер зберігається на кожному записі окремо).
-  _parseBrokers(s) {
-    return String((s || {}).channels || "").split(",").map((x) => x.trim()).filter(Boolean);
+  // Брокери й фонди — довідники з власними ендпойнтами. Раніше брокери
+  // жили CSV-рядком у налаштуваннях, тож «перейменувати» означало лише
+  // підмінити підказку: у самих лотах лишалась стара назва. Тепер записи
+  // тримаються за id, і перейменування підхоплюють усі разом.
+  //
+  // Назва — редаговане поле, збереження по Enter або втраті фокуса:
+  // окрема кнопка «зберегти» тут лише додала б клік.
+  _catalogRowHTML(item, currency) {
+    const cur = currency !== undefined
+      ? `<input class="cat-cur" value="${esc(currency)}" style="width:80px">` : "";
+    return `<div class="pv-row" data-cat="${item.id}">
+      <span style="display:flex;gap:8px"><input class="cat-name" value="${esc(item.name)}" style="width:200px">${cur}</span>
+      <button class="sm warn" data-catdel="${item.id}">✕</button></div>`;
   }
 
-  _brokerManagerHTML(s) {
-    const list = this._parseBrokers(s);
-    const rows = list.length
-      ? list.map((b) => `<div class="pv-row"><span><b>${esc(b)}</b></span>
-          <button class="sm warn" data-delbroker="${esc(b)}">✕</button></div>`).join("")
+  _catalogsHTML() {
+    const brokers = (this._brokers || []).length
+      ? this._brokers.map((b) => this._catalogRowHTML(b)).join("")
       : `<div class="muted" style="font-size:13px">Ще немає брокерів. Додай mono, inzhur…</div>`;
+    const funds = (this._fundCatalog || []).length
+      ? this._fundCatalog.map((f) => this._catalogRowHTML(f, f.currency)).join("")
+      : `<div class="muted" style="font-size:13px">Фондів ще немає — вони зʼявляться після першої купівлі сертифікатів.</div>`;
     return `<div class="card" id="brokerCard">
-      <h2>Брокери</h2>
-      <div class="muted" style="margin-bottom:10px">Рахунки для купівлі ОВДП. Зʼявляються у випадайках форм грошей і покупки.</div>
-      ${rows}
-      <form id="brokerAddForm" style="margin-top:10px;display:flex;gap:8px">
-        <input name="broker" placeholder="назва брокера" style="flex:0 0 200px" autocomplete="off">
-        <button type="submit">Додати</button>
-      </form></div>`;
+        <h2>Брокери</h2>
+        <div class="muted" style="margin-bottom:10px">Рахунки, на яких лежать гроші й папери. Перейменування підхоплюють
+          усі записи разом. Видалити можна лише того, за ким не лишилось записів.</div>
+        ${brokers}
+        <form id="brokerAddForm" style="margin-top:10px;display:flex;gap:8px">
+          <input name="broker" placeholder="назва брокера" style="flex:0 0 200px" autocomplete="off">
+          <button type="submit">Додати</button>
+        </form>
+      </div>
+      <div class="card" id="fundCatalogCard">
+        <h2>Фонди</h2>
+        <div class="muted" style="margin-bottom:10px">Заводяться самі при першій операції. Тут виправляють назву й валюту —
+          помилка в назві більше не розщеплює позицію надвоє.</div>
+        ${funds}
+      </div>`;
   }
 
-  async _saveBrokers(list) {
-    const uniq = [...new Set(list.map((x) => x.trim()).filter(Boolean))]
-      .sort((a, b) => a.localeCompare(b, "uk"));
-    await this._api("PUT", "settings", { channels: uniq.join(", ") });
-    this._loadTab();
+  // Спільна прошивка для обох довідників: різняться лише ендпойнтом.
+  _bindCatalog(card, path, withCurrency) {
+    if (!card) return;
+    card.querySelectorAll("[data-cat]").forEach((row) => {
+      const id = row.dataset.cat;
+      const name = row.querySelector(".cat-name");
+      const cur = row.querySelector(".cat-cur");
+      const key = () => name.value.trim() + "|" + (cur ? cur.value.trim() : "");
+      row.dataset.was = key();
+      const commit = async () => {
+        if (!name.value.trim() || key() === row.dataset.was) return;
+        row.dataset.was = key();
+        const body = { name: name.value.trim() };
+        if (withCurrency) body.currency = cur ? cur.value.trim() : "";
+        try { await this._api("PUT", `${path}/${id}`, body); this._toast("Збережено"); this._loadTab(); }
+        catch (err) { this._toast(String(err.message || err), false); }
+      };
+      for (const el of [name, cur]) {
+        if (!el) continue;
+        el.addEventListener("blur", commit);
+        el.addEventListener("keydown", (e) => { if (e.key === "Enter") el.blur(); });
+      }
+      row.querySelector("[data-catdel]").addEventListener("click", async () => {
+        if (!confirm(`Видалити «${name.value}»?`)) return;
+        try { await this._api("DELETE", `${path}/${id}`); this._toast("Видалено"); this._loadTab(); }
+        catch (err) { this._toast(String(err.message || err), false); }
+      });
+    });
   }
 
   _bindBrokers(main) {
-    const card = main.querySelector("#brokerCard");
-    if (!card) return;
-    // джерело правди — те, що на екрані, а не можливо застарілий this._summary
-    const shown = () => [...card.querySelectorAll("[data-delbroker]")].map((b) => b.dataset.delbroker);
-    card.querySelector("#brokerAddForm").addEventListener("submit", async (e) => {
+    this._bindCatalog(main.querySelector("#brokerCard"), "brokers", false);
+    this._bindCatalog(main.querySelector("#fundCatalogCard"), "fund-catalog", true);
+    const form = main.querySelector("#brokerAddForm");
+    if (!form) return;
+    form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const name = e.target.broker.value.trim();
       if (!name) return;
-      if (shown().some((b) => b.toLowerCase() === name.toLowerCase())) {
+      if ((this._brokers || []).some((b) => b.name.toLowerCase() === name.toLowerCase())) {
         this._toast("Такий брокер уже є", false);
         return;
       }
-      try { await this._saveBrokers([...shown(), name]); this._toast("Брокера додано"); }
+      try { await this._api("POST", "brokers", { name }); this._toast("Брокера додано"); this._loadTab(); }
       catch (err) { this._toast(String(err.message || err), false); }
     });
-    card.querySelectorAll("[data-delbroker]").forEach((b) =>
-      b.addEventListener("click", async () => {
-        try { await this._saveBrokers(shown().filter((x) => x !== b.dataset.delbroker)); this._toast("Брокера прибрано"); }
-        catch (err) { this._toast(String(err.message || err), false); }
-      }));
   }
 
   _bindBackup(main) {
