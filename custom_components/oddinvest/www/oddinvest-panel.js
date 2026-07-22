@@ -74,6 +74,7 @@ const INFO = {
   income: ["Дохід по місяцях", "Скільки купонів і погашень надійде кожного місяця на рік наперед (грн-екв). Це твій потік для реінвесту — видно, коли назбирається на наступний папір. Порожній місяць = виплат немає."],
   currency: ["Валюта: факт vs ціль", "Синій стовпчик — поточна частка валюти в портфелі, сірий — твоя цільова частка з Налаштувань. Синій нижчий за сірий → валюту треба добирати; вищий → уже перебір."],
   capital: ["Крива капіталу", "Проєкція капіталу на 1/3/5/10 років. Сіра лінія — просто сума внесків без відсотків, синя — з реінвестом під дохідність портфеля. Розрив між ними — це робота складного відсотка. Модель — припущення, не гарантія."],
+  import: ["Імпорт виписки", "Виписка Inzhur у .xlsx. Спершу «Переглянути» — застосунок покаже, що саме додасть, і нічого не запише. Рядки, які вже є в базі, позначені: щомісячна виписка містить і старі операції, тож повторний імпорт нічого не подвоює. Окремо позначаються КОНФЛІКТИ — коли та сама сума вже лежить у гаманці ручним рухом: доки обліку фондів не було, купівлі сертифікатів доводилось записувати як зняття, і тепер така пара порахувалась би двічі; такий ручний запис треба спершу видалити в «Рухах» нижче. Облігації імпорт свідомо пропускає — їх ти вносиш вручну. Жоден рядок не зникає мовчки: усе, що не імпортовано, показано з причиною."],
   reconcile: ["Звірка рахунку", "Введи баланс, який показує брокер, — застосунок порівняє його з тим, що виходить із записів. Розбіжність майже завжди означає одне з двох: плюс — надійшло щось незаписане (поповнення або купон, що прийшов раніше за графік); мінус — витрачено щось незаписане (купівля або комісія). Кнопка створює коригуюче поповнення рівно на різницю з поміткою «звірка», щоб баланс зійшовся, а сама розбіжність лишилась видимою в історії, а не розчинилась. Рахунки брокерів роздільні, тож звіряти треба кожен окремо."],
   funds: ["Сертифікати фондів", "Сертифікати фондів — інший інструмент, ніж ОВДП: немає ні погашення, ні номіналу, ні графіка купонів, зате є ринкова ціна й нерегулярні дивіденди. Ціна береться з останньої твоєї операції — виписка приносить її з собою, тож окреме джерело котирувань не потрібне; між виписками вона застаріває, і дата поруч це показує. Дохідність — ПІСЛЯ податку: дивіденд фонду оподатковується (зараз 14%: ПДФО 9% + військовий збір 5%), а купон ОВДП звільнений, тож до податку порівнювати їх означало б давати фонду фору. «Результат» — прибуток від уже закритих продажів за вирахуванням собівартості й податку."],
   income: ["Пасивний дохід", "Скільки папери приноситимуть ЩОМІСЯЦЯ — тобто потік, який можна забирати, не проїдаючи тіло. Погашення сюди не входять: повернення номіналу це твої ж гроші, а не дохід. «Зараз» — середній купон за наступні 12 місяців із реального графіка виплат. Далі — симуляція: капітал на кожному горизонті помножений на ставку, під яку він працює на той момент (а вона сповзає до довгострокової). Усе в гривні сьогоднішньої купівельної спроможності, тож числа можна порівнювати з сьогоднішніми витратами. Рядок «за фактом» рахується від твого справжнього темпу поповнень, а не від плану."],
@@ -1092,6 +1093,79 @@ class OddInvestPanel extends HTMLElement {
     });
   }
 
+  // Імпорт виписки. Два кроки навмисно: спершу показати, що буде
+  // зроблено, і лише потім писати. Ціна помилки тут — подвоєний баланс,
+  // а він знаходиться не одразу.
+  _importHTML() {
+    return `<div class="card"><h2 class="h-row" style="justify-content:space-between">
+      <span>Імпорт виписки ${infoBtn("import")}</span></h2>
+      <div class="muted" style="font-size:12px;margin-bottom:8px">Файл Inzhur (.xlsx). Спершу перегляд — нічого не записується.</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="file" id="impFile" accept=".xlsx">
+        <button id="impPreview">Переглянути</button>
+      </div>
+      <div id="impOut" style="margin-top:10px"></div></div>`;
+  }
+
+  _wireImport(main) {
+    const file = main.querySelector("#impFile");
+    const out = main.querySelector("#impOut");
+    if (!file || !out) return;
+
+    const send = async (dry) => {
+      if (!file.files || !file.files[0]) { this._toast("Обери файл", false); return null; }
+      const fd = new FormData();
+      fd.append("file", file.files[0]);
+      const resp = await this._hass.fetchWithAuth(
+        "/api/oddinvest/import/inzhur" + (dry ? "?dry=1" : ""), { method: "POST", body: fd });
+      if (!resp.ok) throw new Error(`${resp.status}: ${(await resp.text()).slice(0, 300)}`);
+      return resp.json();
+    };
+
+    const KIND = { fund_buy: "купівля", fund_sell: "продаж", dividend: "дивіденд",
+      deposit: "поповнення", withdrawal: "виведення" };
+    const render = (res, dry) => {
+      const rows = (res.rows || []).map((r) => {
+        const tag = r.conflict
+          ? `<div style="color:var(--error-color,#db4437);font-size:11px">⚠ ${esc(r.conflict)}</div>`
+          : r.exists ? `<span class="muted" style="font-size:11px">вже є</span>` : "";
+        return `<div style="margin-bottom:6px">
+          <div style="display:flex;justify-content:space-between;gap:8px">
+            <span>${dayMonth(r.date)} · ${KIND[r.kind] || r.kind}${
+              r.fund ? ` <span class="muted">${esc(r.fund)}</span>` : ""}${
+              r.qty ? ` <span class="muted">${r.qty} серт.</span>` : ""}</span>
+            <span><b>${esc(r.amount)}</b>${r.tax && r.tax !== "0.00" ? ` <span class="muted" style="font-size:11px">податок ${esc(r.tax)}</span>` : ""} ${r.exists && !r.conflict ? `<span class="muted" style="font-size:11px">вже є</span>` : ""}</span>
+          </div>${r.conflict ? tag : ""}</div>`;
+      }).join("");
+      const skipped = (res.skipped || []).map((s) =>
+        `<div class="muted" style="font-size:11px">${dayMonth(s.Date || s.date)} · ${esc(s.Op || s.op)} — ${esc(s.Reason || s.reason)}</div>`).join("");
+      const conflicts = (res.rows || []).filter((r) => r.conflict).length;
+      out.innerHTML = `
+        <div style="margin-bottom:8px">Знайдено ${(res.rows || []).length} операцій · <b>${res.new}</b> нових${
+          conflicts ? ` · <span style="color:var(--error-color,#db4437)">${conflicts} з конфліктом</span>` : ""}</div>
+        ${rows}
+        ${skipped ? `<div style="border-top:1px solid var(--divider-color,#3334);margin-top:8px;padding-top:6px">
+          <div class="muted" style="font-size:12px;margin-bottom:4px">пропущено:</div>${skipped}</div>` : ""}
+        ${dry && res.new > 0 ? `<button id="impGo" style="margin-top:10px">Імпортувати ${res.new}</button>` : ""}
+        ${!dry ? `<div style="margin-top:8px;color:var(--success-color,#43a047)">Записано ${res.imported}</div>` : ""}`;
+      const go = out.querySelector("#impGo");
+      if (go) {
+        go.addEventListener("click", async () => {
+          go.disabled = true;
+          try { render(await send(false), false); this._toast("Імпортовано"); await this._loadTab(); }
+          catch (err) { this._toast(String(err.message || err), false); go.disabled = false; }
+        });
+      }
+    };
+
+    main.querySelector("#impPreview").addEventListener("click", async (e) => {
+      e.target.disabled = true;
+      try { const res = await send(true); if (res) render(res, true); }
+      catch (err) { this._toast(String(err.message || err), false); }
+      finally { e.target.disabled = false; }
+    });
+  }
+
   async _renderAccount(main) {
     const [deposits, conversions] = await Promise.all([
       this._api("GET", "deposits").catch(() => []),
@@ -1120,6 +1194,8 @@ class OddInvestPanel extends HTMLElement {
       ${this._brokerBalancesHTML()}
 
       ${this._reconcileHTML()}
+
+      ${this._importHTML()}
 
       <div class="card">
         <h2>Додати рух</h2>
@@ -1202,6 +1278,7 @@ class OddInvestPanel extends HTMLElement {
         catch (err) { this._toast(String(err.message || err), false); }
       }));
     this._wireReconcile(main);
+    this._wireImport(main);
   }
 
   // ---------- КАЛЕНДАР ----------
