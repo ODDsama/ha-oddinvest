@@ -74,6 +74,10 @@ class StateDoc:
     next_payment: NextPayment | None = None
     eur_share_pct: float = 0.0
     account_uah: float = 0.0
+    # funds_uah — сертифікати фондів у грн-екв. Необов'язкове: старіший
+    # бекенд поля не надсилає, і інтеграція має пережити це нулем, а не
+    # падінням.
+    funds_uah: float = 0.0
     reinvest_min_uah: float = 0.0
     accounts: dict[str, float] = field(default_factory=dict)
     reinvest_min: dict[str, float] = field(default_factory=dict)
@@ -146,6 +150,7 @@ class StateDoc:
             next_payment=np,
             eur_share_pct=float(raw.get("eur_share_pct", 0.0)),
             account_uah=float(raw.get("account_uah", 0.0)),
+            funds_uah=float(raw.get("funds_uah", 0.0)),
             reinvest_min_uah=float(raw.get("reinvest_min_uah", 0.0)),
             accounts={str(k): float(v) for k, v in (raw.get("accounts") or {}).items()},
             reinvest_min={str(k): float(v) for k, v in (raw.get("reinvest_min") or {}).items()},

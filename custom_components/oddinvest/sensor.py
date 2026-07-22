@@ -125,7 +125,9 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=0,
-        value_fn=lambda d: d.nominal_uah_eq + d.account_uah,
+        # Капітал — усе, що працює: папери, гроші й сертифікати фондів.
+        # Без останніх сенсор занижував капітал на їхню вартість.
+        value_fn=lambda d: d.nominal_uah_eq + d.account_uah + d.funds_uah,
     ),
     OddInvestSensorDescription(
         key="month_invested_uah",
