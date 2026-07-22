@@ -846,7 +846,7 @@ class OddInvestPanel extends HTMLElement {
     const xirrTiles = Object.keys(xr).length
       ? Object.entries(xr).map(([c, v]) => this._tile(`XIRR ${curSym(c)}`, pct(v))).join("")
       : this._tile("XIRR", "—",
-          `<div class="muted" style="font-size:12px;margin-top:4px">потрібно 30 днів історії</div>`);
+          `<div class="muted" style="font-size:12px;margin-top:4px">гроші мають попрацювати ≥30 днів у середньому</div>`);
     const portTiles = `<div class="tiles" style="margin:0 0 12px;padding:0">
       ${this._tile("Вкладено (грн-екв.)", fmtUAH(s0.invested_uah + fundsCost(s0)),
         fundsCost(s0) > 0 ? `<div class="muted" style="font-size:12px;margin-top:4px">з них ${fmtUAH(fundsCost(s0))} у фондах</div>` : "")}
