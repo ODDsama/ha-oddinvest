@@ -853,8 +853,12 @@ class OddInvestPanel extends HTMLElement {
       ${this._tile("Номінал (грн-екв.)", fmtUAH(s0.nominal_uah_eq))}
       ${this._tile("Накопичений купон", fmtUAH(s0.accrued_uah || 0),
         `<div class="muted" style="font-size:12px;margin-top:4px">зароблено, ще не виплачено</div>`)}
-      ${Object.entries(py).map(([c, v]) => this._tile(`Дохідність ${curSym(c)}`, pct(v),
+      ${Object.entries(py).map(([c, v]) => this._tile(`ОВДП ${curSym(c)}`, pct(v),
         `<div class="muted" style="font-size:12px;margin-top:4px">до погашення, від сплаченої ціни</div>`)).join("")}
+      ${s0.funds_yield_pct > 0 ? this._tile("Фонди", pct(s0.funds_yield_pct),
+        `<div class="muted" style="font-size:12px;margin-top:4px">дивіденди після податку, річні</div>`) : ""}
+      ${s0.blended_yield_pct > 0 ? this._tile("Дохідність портфеля", pct(s0.blended_yield_pct),
+        `<div class="muted" style="font-size:12px;margin-top:4px">ОВДП і фонди разом, зважено вкладеним</div>`) : ""}
       ${xirrTiles}
     </div>
     ${this._investedByBrokerHTML()}`;
@@ -1039,6 +1043,52 @@ class OddInvestPanel extends HTMLElement {
   //
   // Форма кожного розділу працює і на «додати», і на «виправити»:
   // прихований id перемикає POST на PUT, і другого набору полів не треба.
+  // Спільні будівельники таблиць операцій фонду: «Портфель» показує
+  // позиції й лоти, «Імпорт» — продажі й дивіденди. Одна реалізація на
+  // двох, бо дві копії однієї таблиці рано чи пізно розходяться.
+  _fundTable(kind, head, cells, empty) {
+    const ops = this._fundOps || [];
+    const money = (m) => m ? fmtCur(m.amount, curSym(m.currency)) : "—";
+    // Найновіші зверху: дивишся майже завжди на щойно імпортоване.
+    const rows = ops.filter((o) => o.kind === kind)
+      .sort((a, b) => a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id);
+    if (!rows.length) return `<div class="muted">${empty}</div>`;
+    const ctx = {
+      money,
+      price: (o) => o.qty > 0 && o.amount ? (Number(o.amount.amount) / o.qty).toFixed(4) : "",
+      tax: (o) => o.tax && Number(o.tax.amount) > 0 ? money(o.tax) : "",
+    };
+    // Тільки видалення: записи приходять з виписки, і руками їх не
+    // правлять — два джерела правди неминуче розійшлись би. ✕ лишається
+    // як аварійний вихід, бо імпорт уже одного разу приніс зайве.
+    return `<table><thead><tr>${head}<th>Дата</th><th>Брокер</th><th>Нотатка</th><th></th></tr></thead><tbody>
+      ${rows.map((o) => `<tr><td class="num">${o.id}</td><td>${esc(o.fund)}</td>${cells(o, ctx)}
+        <td>${esc(o.date)}</td><td>${esc(o.broker || "")}</td><td class="muted">${esc(o.note || "")}</td>
+        <td class="row-actions"><button class="sm warn" data-delfund="${o.id}">✕</button></td></tr>`).join("")}
+      </tbody></table>`;
+  }
+
+  // Те, що принесла виписка: продажі й дивіденди. Живе на вкладці
+  // «Імпорт», бо саме туди йдеш перевіряти, чи все зайшло правильно.
+  _fundStatementHTML() {
+    if (!(this._fundOps || []).length) return "";
+    return `<div class="card"><h2>Продажі сертифікатів</h2>
+        <div class="muted" style="margin-bottom:10px">Що принесла виписка. Тут же ✕, якщо принесла зайве.</div>
+        ${this._fundTable("sell",
+          `<th class="num">ID</th><th>Фонд</th><th class="num">К-сть</th><th class="num">Ціна</th><th class="num">Отримано</th><th class="num">Податок</th>`,
+          (o, c) => `<td class="num">${o.qty}</td><td class="num">${c.price(o)}</td>
+            <td class="num">${c.money(o.amount)}</td><td class="num">${c.tax(o)}</td>`,
+          "Продажів ще не було.")}
+      </div>
+      <div class="card"><h2>Дивіденди фондів</h2>
+        ${this._fundTable("dividend",
+          `<th class="num">ID</th><th>Фонд</th><th class="num">Нараховано</th><th class="num">Податок</th><th class="num">Чистими</th>`,
+          (o, c) => `<td class="num">${c.money(o.amount)}</td><td class="num">${c.tax(o)}</td>
+            <td class="num">${fmtCur(Number(o.amount.amount) - Number((o.tax || {}).amount || 0), curSym(o.amount.currency))}</td>`,
+          "Дивідендів ще не було.")}
+      </div>`;
+  }
+
   _fundOpsHTML() {
     const ops = this._fundOps || [];
     // Закритий фонд — не позиція: показувати «0 серт.» означає питати про
@@ -1050,27 +1100,6 @@ class OddInvestPanel extends HTMLElement {
     // повторити ту помилку, з якої все й почалось.
     const funds = ((this._summary || {}).funds || []).filter((f) => f.qty > 0 || f.short > 0);
     if (!ops.length && !funds.length) return "";
-    // Підказка фондів — з уже записаних операцій: назва має збігатися
-    // символ у символ, інакше один фонд розпадеться на дві позиції.
-    const names = [...new Set(ops.map((o) => o.fund).filter(Boolean))].sort((a, b) => a.localeCompare(b, "uk"));
-    const money = (m) => m ? fmtCur(m.amount, curSym(m.currency)) : "—";
-    const price = (o) => o.qty > 0 && o.amount ? (Number(o.amount.amount) / o.qty).toFixed(4) : "";
-    const tax = (o) => o.tax && Number(o.tax.amount) > 0 ? money(o.tax) : "";
-    // Тільки видалення: записи приходять з виписки, і руками їх не
-    // правлять — два джерела правди неминуче розійшлись би. ✕ лишається
-    // як аварійний вихід, бо імпорт уже одного разу приніс зайве.
-    const acts = (id) => `<td class="row-actions">
-      <button class="sm warn" data-delfund="${id}">✕</button></td>`;
-    // Найновіші зверху: правиш майже завжди щойно імпортоване.
-    const of = (kind) => ops.filter((o) => o.kind === kind)
-      .sort((a, b) => a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id);
-    const tail = (o) => `<td>${esc(o.date)}</td><td>${esc(o.broker || "")}</td>
-      <td class="muted">${esc(o.note || "")}</td>${acts(o.id)}`;
-    const table = (rows, head, cells, empty) => rows.length
-      ? `<table><thead><tr>${head}<th>Дата</th><th>Брокер</th><th>Нотатка</th><th></th></tr></thead><tbody>
-        ${rows.map((o) => `<tr><td class="num">${o.id}</td><td>${esc(o.fund)}</td>${cells(o)}${tail(o)}</tr>`).join("")}
-        </tbody></table>`
-      : `<div class="muted">${empty}</div>`;
     const positions = funds.length ? `<table><thead><tr>
       <th>Фонд</th><th class="num">К-сть</th><th class="num">Ціна</th><th class="num">Вартість</th>
       <th class="num">Вкладено</th><th class="num">Прибуток</th><th class="num">Дивіденди</th>
@@ -1102,25 +1131,10 @@ class OddInvestPanel extends HTMLElement {
       </div>
 
       <div class="card"><h2>Лоти фондів</h2>
-        ${table(of("buy"),
+        ${this._fundTable("buy",
           `<th class="num">ID</th><th>Фонд</th><th class="num">К-сть</th><th class="num">Ціна</th><th class="num">Сплачено</th>`,
-          (o) => `<td class="num">${o.qty}</td><td class="num">${price(o)}</td><td class="num">${money(o.amount)}</td>`,
+          (o, c) => `<td class="num">${o.qty}</td><td class="num">${c.price(o)}</td><td class="num">${c.money(o.amount)}</td>`,
           "Купівель ще немає.")}
-      </div>
-
-      <div class="card"><h2>Продажі</h2>
-        ${table(of("sell"),
-          `<th class="num">ID</th><th>Фонд</th><th class="num">К-сть</th><th class="num">Ціна</th><th class="num">Отримано</th><th class="num">Податок</th>`,
-          (o) => `<td class="num">${o.qty}</td><td class="num">${price(o)}</td><td class="num">${money(o.amount)}</td><td class="num">${tax(o)}</td>`,
-          "Продажів ще не було.")}
-      </div>
-
-      <div class="card"><h2>Дивіденди</h2>
-        ${table(of("dividend"),
-          `<th class="num">ID</th><th>Фонд</th><th class="num">Нараховано</th><th class="num">Податок</th><th class="num">Чистими</th>`,
-          (o) => `<td class="num">${money(o.amount)}</td><td class="num">${tax(o)}</td>
-            <td class="num">${fmtCur(Number(o.amount.amount) - Number((o.tax || {}).amount || 0), curSym(o.amount.currency))}</td>`,
-          "Дивідендів ще не було.")}
       </div>`;
   }
 
@@ -1256,7 +1270,9 @@ class OddInvestPanel extends HTMLElement {
   async _renderImport(main) {
     main.innerHTML = `<div class="muted" style="margin:16px 0 12px">Виписка Inzhur наповнює портфель: лоти ОВДП,
       сертифікати фондів, дивіденди — і рухи грошей, які з них випливають.</div>
-      ${this._importHTML()}`;
+      ${this._importHTML()}
+      ${this._fundStatementHTML()}`;
+    this._wireFundOps(main);
     this._wireImport(main);
   }
 
