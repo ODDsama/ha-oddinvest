@@ -108,11 +108,26 @@ const FIXTURE = "../../oddinvest/contract/fixtures/basic.json";
 const MOCK = {
   brokers: [{ id: 1, name: "mono" }, { id: 2, name: "inzhur" }],
   "fund-catalog": [{ id: 1, name: "Inzhur OFFICE", currency: "UAH" }],
-  reinvest: [{
-    isin: "UA4000227748", currency: "UAH", maturity: "2027-03-17",
-    ytm_pct: 16.4, real_pct: 9.8, cost_per_bond: { amount: "1050.00", currency: "UAH" },
-    brokers: [{ broker: "mono", qty: 2 }], reason: "закриває дірку 2027 року",
-  }],
+  // Три типи пропозицій: вклад дохідніший за фонд, попри те, що фонд
+  // удвадцятеро дешевший — саме це й має показувати банер.
+  reinvest: [
+    { kind: "deposit", label: "ПУМБ", currency: "UAH", rate_pct: "16.00",
+      maturity: "2027-06-01", real_pct: 12.9, yield_basis: "ставка вкладу після податку",
+      cost_per_bond: { amount: "100000.00", currency: "UAH" },
+      brokers: [{ broker: "ПУМБ", qty: 1 }], can_buy: true,
+      reason: "поповнення на суму відкриття" },
+    { kind: "bond", label: "UA4000227748", isin: "UA4000227748", currency: "UAH",
+      maturity: "2027-03-17", ytm_pct: 16.4, real_pct: 9.8,
+      yield_basis: "до погашення",
+      cost_per_bond: { amount: "1050.00", currency: "UAH" },
+      brokers: [{ broker: "mono", qty: 2 }], can_buy: true,
+      reason: "закриває дірку 2027 року" },
+    { kind: "fund", label: "Inzhur OFFICE", currency: "UAH", real_pct: 8.2,
+      yield_basis: "дивіденди після податку",
+      cost_per_bond: { amount: "10.40", currency: "UAH" },
+      brokers: [{ broker: "inzhur", qty: 96 }], can_buy: true,
+      reason: "сертифікат: без строку й погашення, ціна ринкова" },
+  ],
   positions: [{
     isin: "UA4000227748", qty: 100,
     invested: { amount: "100000.00", currency: "UAH" },
