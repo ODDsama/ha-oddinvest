@@ -134,6 +134,9 @@ const MOCK = {
     nominal: { amount: "100000.00", currency: "UAH" },
     maturity: "2027-03-17", days_to_maturity: 238,
     next_pay_date: "2026-07-20", next_pay_amount: { amount: "4137.50", currency: "UAH" },
+    // Реальна нижча за YTM: гривня знецінюється, і саме приведене число
+    // порівнюється з фондом і вкладом у спільній таблиці позицій.
+    ytm_pct: 17.24, real_pct: 10.6, yield_basis: "до погашення",
   }],
   lots: [{
     id: 1, isin: "UA4000227748", qty: 100, remaining: 100,
@@ -156,7 +159,8 @@ const MOCK = {
   "term-deposits": [
     { id: 1, bank: "ПУМБ", principal: { amount: "100000.00", currency: "UAH" },
       balance: { amount: "300000.00", currency: "UAH" },
-      rate_pct: 16.5, open_date: "2026-06-01", maturity_date: "2027-06-01",
+      rate_pct: 16.5, real_pct: 6.4, yield_basis: "ставка вкладу",
+      open_date: "2026-06-01", maturity_date: "2027-06-01",
       payout: "monthly", capitalized: false, replenishable: true, tax_pct: 19.5, closed_date: "",
       closed_amount: { amount: "0.00", currency: "UAH" }, note: "",
       topups: [
@@ -189,6 +193,7 @@ async function summary() {
       fund: "Inzhur OFFICE", currency: "UAH", qty: 500, cost_basis: 5000,
       last_price: 10.4, last_price_date: "2026-07-10", market_value: 5200,
       dividends_net: 163.3, dividends_tax: 26.6, yield_net_pct: 8.2,
+      real_pct: 2.1, yield_basis: "дивіденди після податку",
     }],
     nbu_refreshed_at: new Date().toISOString(),
     deposits_uah: 100000,
