@@ -78,6 +78,9 @@ class StateDoc:
     # бекенд поля не надсилає, і інтеграція має пережити це нулем, а не
     # падінням.
     funds_uah: float = 0.0
+    # deposits_uah — тіло діючих банківських вкладів у грн-екв. Так само
+    # необов'язкове: бекенд без вкладів поля не надсилає.
+    deposits_uah: float = 0.0
     reinvest_min_uah: float = 0.0
     accounts: dict[str, float] = field(default_factory=dict)
     reinvest_min: dict[str, float] = field(default_factory=dict)
@@ -151,6 +154,7 @@ class StateDoc:
             eur_share_pct=float(raw.get("eur_share_pct", 0.0)),
             account_uah=float(raw.get("account_uah", 0.0)),
             funds_uah=float(raw.get("funds_uah", 0.0)),
+            deposits_uah=float(raw.get("deposits_uah", 0.0)),
             reinvest_min_uah=float(raw.get("reinvest_min_uah", 0.0)),
             accounts={str(k): float(v) for k, v in (raw.get("accounts") or {}).items()},
             reinvest_min={str(k): float(v) for k, v in (raw.get("reinvest_min") or {}).items()},

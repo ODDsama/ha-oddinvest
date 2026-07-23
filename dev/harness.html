@@ -138,6 +138,16 @@ const MOCK = {
     { date: "2026-07-15", invested_uah: 137305, nominal_uah_eq: 138246, account_uah: 1200, usd_share_pct: 63.8, uninvested_uah: 0, month_target_uah: 5000, funds_uah: 5000 },
   ],
   "bonds/search": [],
+  "term-deposits": [
+    { id: 1, bank: "ПУМБ", principal: { amount: "100000.00", currency: "UAH" },
+      rate_pct: 16.5, open_date: "2026-06-01", maturity_date: "2027-06-01",
+      payout: "monthly", capitalized: false, tax_pct: 19.5, closed_date: "",
+      closed_amount: { amount: "0.00", currency: "UAH" }, note: "" },
+    { id: 2, bank: "mono", principal: { amount: "50000.00", currency: "UAH" },
+      rate_pct: 14, open_date: "2026-01-10", maturity_date: "2026-05-10",
+      payout: "end", capitalized: true, tax_pct: 19.5,
+      closed_date: "2026-03-15", closed_amount: { amount: "51200.00", currency: "UAH" }, note: "потрібні були гроші" },
+  ],
 };
 
 async function summary() {
@@ -161,6 +171,7 @@ async function summary() {
       dividends_net: 163.3, dividends_tax: 26.6, yield_net_pct: 8.2,
     }],
     nbu_refreshed_at: new Date().toISOString(),
+    deposits_uah: 100000,
 
     // Фікстура — документ MQTT-стану на мінімальному портфелі, тож
     // половини полів у ній просто немає, і картки, що з них живуть,
@@ -232,6 +243,8 @@ function body(path) {
     { date: "2026-07-14", isin: "UA4000227748", type: 1, amount: { amount: "82.75", currency: "UAH" }, status: "" },
     { date: "2026-07-10", isin: "UA4000227748", type: 1, amount: { amount: "82.75", currency: "UAH" }, status: "received" },
     { date: "2026-12-20", isin: "UA4000227748", type: 1, amount: { amount: "4137.50", currency: "UAH" }, status: "" },
+    // потік вкладу: синтетичний ISIN має показатись як «вклад»
+    { date: "2026-08-01", isin: "deposit:1", type: 1, amount: { amount: "1288.00", currency: "UAH" }, status: "" },
   ]);
   // Невідомий маршрут — це або новий виклик, який забули додати сюди,
   // або друкарська помилка. Тихо віддавати [] означало б сховати друге.
