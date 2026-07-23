@@ -155,7 +155,18 @@ const MOCK = {
     { date: "2026-07-14", invested_uah: 133000, nominal_uah_eq: 134500, account_uah: 900, usd_share_pct: 62, uninvested_uah: 0, month_target_uah: 5000, funds_uah: 4900 },
     { date: "2026-07-15", invested_uah: 137305, nominal_uah_eq: 138246, account_uah: 1200, usd_share_pct: 63.8, uninvested_uah: 0, month_target_uah: 5000, funds_uah: 5000 },
   ],
-  "bonds/search": [],
+  // Довідник НБУ: пошук за префіксом і картка одного паперу. Обидва
+  // потрібні, щоб стенд узагалі проходив шлях автопідказки в «Новій
+  // покупці» — з порожнім масивом підказка ніколи не показувалась, і
+  // зламати її можна було непомітно.
+  "bonds/search": [
+    { isin: "UA4000227748", descr: "гривневі військові", rate_pct: 16.55, maturity: "2027-03-17" },
+    { isin: "UA4000227755", descr: "гривневі військові", rate_pct: 15.90, maturity: "2028-01-19" },
+  ],
+  "bonds/UA4000227748": {
+    isin: "UA4000227748", descr: "гривневі військові", rate_pct: 16.55,
+    maturity: "2027-03-17", nominal: { amount: "1000.00", currency: "UAH" },
+  },
   "term-deposits": [
     { id: 1, bank: "ПУМБ", principal: { amount: "100000.00", currency: "UAH" },
       balance: { amount: "300000.00", currency: "UAH" },
