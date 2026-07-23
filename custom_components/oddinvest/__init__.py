@@ -155,7 +155,8 @@ def _register_services(hass: HomeAssistant) -> None:
             await async_refresh_service(hass, entry.runtime_data.base_url)
 
     async def handle_mark_payment(call: ServiceCall) -> None:
-        """oddinvest.mark_payment — позначити виплату received/reinvested."""
+        """oddinvest.mark_payment — позначити виплату received/reinvested,
+        або зняти позначку (status=none)."""
         body = {
             "isin": call.data["isin"],
             "pay_date": str(call.data["pay_date"]),

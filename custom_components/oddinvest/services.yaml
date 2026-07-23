@@ -22,9 +22,11 @@ mark_payment:
         date:
     status:
       name: Статус
+      description: received / reinvested, або none — зняти позначку.
       required: true
       selector:
         select:
           options:
             - received
             - reinvested
+            - none
