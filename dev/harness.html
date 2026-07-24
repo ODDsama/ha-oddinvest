@@ -304,6 +304,18 @@ function body(path) {
   if (key === "summary") return summary();
   if (key in MOCK) return Promise.resolve(MOCK[key]);
   if (key === "settings") return Promise.resolve({ usd_target_share_pct: 50, goal_date: "2031-01-01" });
+  // Справжні числа з НБУ: саме вони й вирішили брати десятирічне вікно.
+  // Рядки навмисно розкидані від 4.3% до 11.5% — різниця між ними і є
+  // аргументом, тож на стенді вона має бути видна.
+  if (key === "devaluation") return Promise.resolve({
+    effective_pct: 6.1, source: "measured",
+    windows: [
+      { label: "за 1 рік", years: 1, pct: 4.3, from: "2025-07-24", to: "2026-07-24" },
+      { label: "за 3 роки", years: 3, pct: 7.1, from: "2023-07-24", to: "2026-07-24" },
+      { label: "за 5 років", years: 5, pct: 10.2, from: "2021-07-24", to: "2026-07-24" },
+      { label: "за 10 років", years: 10, pct: 6.1, from: "2016-07-24", to: "2026-07-24" },
+    ],
+  });
   if (key === "calendar") return Promise.resolve([
     // Три рядки навмисно: минула без статусу (дві кнопки-дії), минула зі
     // статусом (кнопка «Скасувати»), майбутня (без дій).
