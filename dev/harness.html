@@ -308,6 +308,17 @@ function body(path) {
   if (key === "summary") return summary();
   if (key in MOCK) return Promise.resolve(MOCK[key]);
   if (key === "settings") return Promise.resolve({ usd_target_share_pct: 50, goal_date: "2031-01-01" });
+  // Податок. Три інструменти з трьома різними ставками — саме та
+  // асиметрія, яку картка й має показати грошима: 0%, 14%, 19.5%.
+  if (key === "tax") return Promise.resolve({
+    from: "2025-07-24", to: "2026-07-24",
+    gross_uah: 12450.30, tax_uah: 1082.40, net_uah: 11367.90, rate_pct: 8.69,
+    by_kind: [
+      { kind: "bond", label: "Купони ОВДП", gross_uah: 8275, tax_uah: 0, net_uah: 8275, rate_pct: 0 },
+      { kind: "fund", label: "Дивіденди фондів", gross_uah: 1900, tax_uah: 266, net_uah: 1634, rate_pct: 14 },
+      { kind: "deposit", label: "Відсотки вкладів", gross_uah: 2275.30, tax_uah: 816.40, net_uah: 1458.90, rate_pct: 19.5 },
+    ],
+  });
   // Рух грошей. Числа підібрані так, щоб тотожність сходилась:
   // 1200 + 165.30 + 4500 − 4600 − 20 = 1245.30. Якщо картка колись
   // почне не сходитись, це буде видно просто оком.
