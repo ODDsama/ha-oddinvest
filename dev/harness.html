@@ -314,6 +314,12 @@ function body(path) {
   if (key === "summary") return summary();
   if (key in MOCK) return Promise.resolve(MOCK[key]);
   if (key === "settings") return Promise.resolve({ usd_target_share_pct: 50, goal_date: "2031-01-01" });
+  // Бенчмарк. Тут портфель ПРОГРАЄ доларам — і саме такий випадок має
+  // бути на стенді, бо ховати його застосунок не повинен.
+  if (key === "benchmark") return Promise.resolve({
+    portfolio_uah: 244446.80, benchmark_uah: 251300, diff_uah: -6853.20,
+    diff_pct: -2.73, usd_bought: 5608.35, rate_now: 44.81,
+  });
   // Податок. Три інструменти з трьома різними ставками — саме та
   // асиметрія, яку картка й має показати грошима: 0%, 14%, 19.5%.
   if (key === "tax") return Promise.resolve({
