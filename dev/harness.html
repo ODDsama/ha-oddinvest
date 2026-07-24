@@ -308,6 +308,21 @@ function body(path) {
   if (key === "summary") return summary();
   if (key in MOCK) return Promise.resolve(MOCK[key]);
   if (key === "settings") return Promise.resolve({ usd_target_share_pct: 50, goal_date: "2031-01-01" });
+  // Рух грошей. Числа підібрані так, щоб тотожність сходилась:
+  // 1200 + 165.30 + 4500 − 4600 − 20 = 1245.30. Якщо картка колись
+  // почне не сходитись, це буде видно просто оком.
+  if (key === "cashflow") return Promise.resolve({
+    from: "2026-07-01", to: "2026-07-15",
+    opening_uah: 1200, income_uah: 165.30, contributed_uah: 4500,
+    purchased_uah: 4600, conversions_uah: -20, closing_uah: 1245.30,
+    rows: [
+      { date: "2026-07-01", label: "поповнення", uah: 4500, kind: "contribution" },
+      { date: "2026-07-05", label: "UA4000227748", uah: -3600, kind: "purchase" },
+      { date: "2026-07-10", label: "дивіденд Inzhur OFFICE", uah: 165.30, kind: "income" },
+      { date: "2026-07-12", label: "сертифікати Inzhur OFFICE", uah: -1000, kind: "purchase" },
+      { date: "2026-07-14", label: "UAH → USD", uah: -20, kind: "conversion" },
+    ],
+  });
   // Справжні числа з НБУ: саме вони й вирішили брати десятирічне вікно.
   // Рядки навмисно розкидані від 4.3% до 11.5% — різниця між ними і є
   // аргументом, тож на стенді вона має бути видна.
