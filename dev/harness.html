@@ -238,12 +238,15 @@ async function summary() {
       deficit_native: 0, cash_native: 0, bond_cost_native: 1000, bond_cost_uah: 42000,
       can_buy: 0, convert_uah: 0, min_portfolio_uah: 84000, feasible: true,
     }],
+    // Два різні ризики. Ціновий — лише ОВДП (138к номіналу), тож pv_uah
+    // МЕНШИЙ за returning_uah, куди входять іще вклади з відсотками.
     rate_risk: {
       duration_years: 1.8, modified_dur: 1.55, pv_uah: 138000,
       scenarios: [
         { delta_pp: -2, change_pct: 3.1, change_uah: 4278 },
         { delta_pp: 2, change_pct: -3.1, change_uah: -4278 },
       ],
+      reinvest_years: 1.4, returning_uah: 271500, reinvest_soon_uah: 118200,
     },
     forecast: {
       date: "2031-01-01", months: 54, goal_amount: 2000000, contrib_plan: 30000,
