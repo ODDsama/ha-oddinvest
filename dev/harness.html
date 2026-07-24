@@ -207,7 +207,10 @@ async function summary() {
       fund: "Inzhur OFFICE", currency: "UAH", qty: 500, cost_basis: 5000,
       last_price: 10.4, last_price_date: "2026-07-10", market_value: 5200,
       dividends_net: 163.3, dividends_tax: 26.6, yield_net_pct: 8.2,
-      real_pct: 2.1, yield_basis: "дивіденди після податку",
+      // Повна дохідність вища за дивідендну: сертифікат іще й подорожчав
+      // (5000 → 5200). Саме різниця між цими двома числами й була
+      // причиною зробити повну.
+      total_pct: 12.4, real_pct: 6.0, yield_basis: "дивіденди + зміна ціни",
     }],
     nbu_refreshed_at: new Date().toISOString(),
     deposits_uah: 100000,
