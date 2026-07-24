@@ -150,10 +150,13 @@ const MOCK = {
   }],
   deposits: [{ id: 1, date: "2026-07-01", amount: { amount: "4500.00", currency: "UAH" }, note: "зарплата" }],
   conversions: [],
+  // Перший день навмисно без deposits_uah: так виглядають дні до
+  // міграції 0016, і UI мусить сказати «тоді не рахували», а не
+  // намалювати провал капіталу.
   snapshots: [
     { date: "2026-07-13", invested_uah: 130000, nominal_uah_eq: 131000, account_uah: 500, usd_share_pct: 60, uninvested_uah: 0, month_target_uah: 5000, funds_uah: 4800 },
-    { date: "2026-07-14", invested_uah: 133000, nominal_uah_eq: 134500, account_uah: 900, usd_share_pct: 62, uninvested_uah: 0, month_target_uah: 5000, funds_uah: 4900 },
-    { date: "2026-07-15", invested_uah: 137305, nominal_uah_eq: 138246, account_uah: 1200, usd_share_pct: 63.8, uninvested_uah: 0, month_target_uah: 5000, funds_uah: 5000 },
+    { date: "2026-07-14", invested_uah: 133000, nominal_uah_eq: 134500, account_uah: 900, usd_share_pct: 62, uninvested_uah: 0, month_target_uah: 5000, funds_uah: 4900, deposits_uah: 100000 },
+    { date: "2026-07-15", invested_uah: 137305, nominal_uah_eq: 138246, account_uah: 1200, usd_share_pct: 63.8, uninvested_uah: 0, month_target_uah: 5000, funds_uah: 5000, deposits_uah: 100000 },
   ],
   // Довідник НБУ: пошук за префіксом і картка одного паперу. Обидва
   // потрібні, щоб стенд узагалі проходив шлях автопідказки в «Новій
