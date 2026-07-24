@@ -270,6 +270,12 @@ async function summary() {
       deficit_native: 0, cash_native: 0, bond_cost_native: 1000, bond_cost_uah: 42000,
       can_buy: 0, convert_uah: 0, min_portfolio_uah: 84000, feasible: true,
     }],
+    // Ліквідність. Вікна накопичувальні, а замкнене тіло в них НЕ
+    // входить — саме цю пастку подвійного обліку й треба бачити оком.
+    liquidity: {
+      now_uah: 1200, in_30_uah: 5337.50, in_90_uah: 5337.50,
+      locked_uah: 100000, unlock_date: "2027-06-01",
+    },
     // Два різні ризики. Ціновий — лише ОВДП (138к номіналу), тож pv_uah
     // МЕНШИЙ за returning_uah, куди входять іще вклади з відсотками.
     rate_risk: {
