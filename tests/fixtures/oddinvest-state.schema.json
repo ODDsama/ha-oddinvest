@@ -61,6 +61,11 @@
       "type": "object",
       "additionalProperties": { "type": "number" }
     },
+    "rates": {
+      "type": "object",
+      "description": "Курси НБУ на сьогодні, ₴ за одиницю валюти (адитивне поле). Доти курс у документ не потрапляв, і UI діставав його з forecast.rate0_usd — тобто лише коли задано ціль",
+      "additionalProperties": { "type": "number" }
+    },
     "reinvest_min": {
       "type": "object",
       "additionalProperties": { "type": "number" }
@@ -80,12 +85,6 @@
     "month_incoming_uah": {
       "type": "number",
       "minimum": 0
-    },
-    "insurance_days_left": {
-      "type": [
-        "integer",
-        "null"
-      ]
     },
     "next_payment": {
       "type": [
@@ -237,13 +236,91 @@
           "minimum": 0,
           "maximum": 100
         },
-        "insurance_renewal": {
+        "eur_target_share_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "assumed_rate_pct": {
+          "type": "number",
+          "description": "Застаріле: проєкції беруть portfolio_yield_pct"
+        },
+        "goal_amount_uah": {
+          "type": "number",
+          "minimum": 0
+        },
+        "goal_date": {
           "type": "string",
           "format": "date"
         },
-        "insurance_premium_uah": {
+        "reinvest_rank": {
+          "type": "string",
+          "enum": ["plan", "rate", "short", "ladder"],
+          "description": "Критерій ранжування помічника реінвесту (адитивне поле)"
+        },
+        "uah_devaluation_pct": {
           "type": "number",
-          "minimum": 0
+          "minimum": 0,
+          "description": "Очікуване річне знецінення гривні, %; порожньо = виміряне з курсів НБУ (адитивне поле)"
+        },
+        "terminal_rate_pct": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Довгострокова гривнева ставка ОВДП, до якої сповзає сьогоднішня (адитивне поле)"
+        },
+        "rate_glide_years": {
+          "type": "number",
+          "minimum": 0,
+          "description": "За скільки років ставка сповзає до довгострокової (адитивне поле)"
+        },
+        "goal_pessimistic_uah": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Спадок моделі трьох цілей; лишається як запасне джерело для goal_amount_uah (адитивне поле)"
+        },
+        "goal_realistic_uah": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Спадок моделі трьох цілей (адитивне поле)"
+        },
+        "goal_optimistic_uah": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Спадок моделі трьох цілей (адитивне поле)"
+        },
+        "channels": {
+          "type": "string",
+          "description": "Канали купівлі через кому (mono, inzhur…)"
+        },
+        "deposit_min_usd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Мінімальне вкладення у вклад USD (мажорні). Поріг реінвесту й крок поради «новий вклад». За замовч. 100 (адитивне поле)"
+        },
+        "deposit_min_eur": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Те саме для EUR, за замовч. 100 (адитивне поле)"
+        },
+        "deposit_min_uah": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Те саме для UAH; за замовч. вимкнено (адитивне поле)"
+        },
+        "deposit_rate_usd_pct": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Річна ставка нового вкладу USD, %. Без неї поради «новий вклад» немає (адитивне поле)"
+        },
+        "deposit_rate_eur_pct": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Річна ставка нового вкладу EUR, % (адитивне поле)"
+        },
+        "deposit_rate_uah_pct": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Річна ставка нового вкладу UAH, % (адитивне поле)"
         }
       }
     },
@@ -252,6 +329,227 @@
       "description": "Річний XIRR по валютах, % (v1.0+, адитивне поле)",
       "additionalProperties": {
         "type": "number"
+      }
+    },
+    "portfolio_yield_pct": {
+      "type": "number",
+      "description": "Очікувана дохідність за придбаними паперами: купон за 12 міс ÷ номінал, зважено, грн-екв. (адитивне поле)"
+    },
+    "portfolio_yield_real": {
+      "type": "object",
+      "description": "Те саме після знецінення гривні, тобто в сьогоднішній купівельній спроможності. Валютні рукави проходять без поправки — долар тримає спроможність сам (адитивне поле)",
+      "additionalProperties": { "type": "number" }
+    },
+    "funds_yield_real_pct": {
+      "type": "number",
+      "description": "Дохідність фондів після знецінення (адитивне поле)"
+    },
+    "blended_yield_real_pct": {
+      "type": "number",
+      "description": "Зведена дохідність після знецінення (адитивне поле)"
+    },
+    "portfolio_yield": {
+      "type": "object",
+      "description": "Очікувана дохідність по кожній валюті окремо, % НОМІНАЛЬНИХ (YTM за собівартістю лотів, зважена вкладеним; адитивне поле). Реальний двійник — portfolio_yield_real",
+      "additionalProperties": { "type": "number" }
+    },
+    "projection": {
+      "type": "array",
+      "description": "Прогноз капіталу помісячною симуляцією реальних потоків (адитивне поле)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "years": { "type": "integer" },
+          "contributed": { "type": "number" },
+          "with_reinvest": { "type": "number" }
+        }
+      }
+    },
+    "projection_rate_pct": { "type": "number", "description": "Ставка реінвесту в проєкції, %" },
+    "rebalance": {
+      "type": "array",
+      "description": "Підказка виходу на цільові валютні частки (адитивне поле)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "currency": { "type": "string" },
+          "target_pct": { "type": "number" },
+          "current_pct": { "type": "number" },
+          "deficit_uah": { "type": "number" },
+          "deficit_native": { "type": "number" },
+          "cash_native": { "type": "number" },
+          "bond_cost_native": { "type": "number" },
+          "bond_cost_uah": { "type": "number" },
+          "can_buy": { "type": "integer" },
+          "convert_uah": { "type": "number" },
+          "min_portfolio_uah": { "type": "number" },
+          "feasible": { "type": "boolean" },
+          "unit_kind": { "type": "string", "description": "Тип одиниці входу: bond | deposit (адитивне поле)" }
+        }
+      }
+    },
+    "rate_risk": {
+      "type": "object",
+      "description": "Процентний ризик — два різні: ціновий (duration/pv/scenarios, ЛИШЕ ОВДП: тільки вони переоцінюються на вторинному ринку) і перевкладення (reinvest_*, ОВДП + вклади: коли гроші повернуться й підуть за новою ставкою). Адитивне поле.",
+      "properties": {
+        "duration_years": { "type": "number" },
+        "modified_dur": { "type": "number" },
+        "pv_uah": { "type": "number" },
+        "by_currency": { "type": "object", "additionalProperties": { "type": "number" } },
+        "reinvest_years": { "type": "number", "description": "середній строк повернення грошей, років (без дисконтування)" },
+        "returning_uah": { "type": "number", "description": "скільки всього повернеться, грн-екв." },
+        "reinvest_soon_uah": { "type": "number", "description": "з них протягом 12 місяців" },
+        "scenarios": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "delta_pp": { "type": "number" },
+              "change_pct": { "type": "number" },
+              "change_uah": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+
+    "funds_uah": {
+      "type": "number",
+      "description": "Вартість сертифікатів фондів, грн-екв. ОКРЕМЕ поле, а не додаток до nominal_uah_eq: у сертифіката немає номіналу (адитивне поле)"
+    },
+    "funds": {
+      "type": "array",
+      "description": "Позиції по фондах (адитивне поле)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "fund": { "type": "string" },
+          "currency": { "type": "string" },
+          "qty": { "type": "integer" },
+          "cost_basis": { "type": "number" },
+          "last_price": { "type": "number" },
+          "last_price_date": { "type": "string" },
+          "market_value": { "type": "number" },
+          "dividends_net": { "type": "number" },
+          "dividends_tax": { "type": "number" },
+          "realized": { "type": "number" },
+          "yield_net_pct": { "type": "number" },
+          "total_pct": { "type": "number" },
+          "short": { "type": "integer", "description": "Продано більше, ніж куплено — розбіжність даних, яку показуємо вголос" }
+        }
+      }
+    },
+    "deposits_uah": {
+      "type": "number",
+      "description": "Тіло діючих банківських вкладів, грн-екв. Теж окреме поле: вклад — інший інструмент (адитивне поле)"
+    },
+    "brokers": {
+      "type": "object",
+      "description": "Баланси в розрізі брокер → валюта → сума. Рахунки роздільні: гривня на inzhur не купить папір у mono (адитивне поле)",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": { "type": "number" }
+      }
+    },
+    "invested_by_broker": {
+      "type": "object",
+      "description": "Вкладено по кожному брокеру, грн-екв. (адитивне поле)",
+      "additionalProperties": { "type": "number" }
+    },
+    "ladder_uah": {
+      "type": "array",
+      "description": "Номінал, що повертається щороку, грн-екв. — для стовпчиків драбини (адитивне поле)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "year": { "type": "integer" },
+          "uah": { "type": "number" }
+        }
+      }
+    },
+    "income_12m": {
+      "type": "array",
+      "description": "Очікуваний дохід (купони + погашення) по місяцях на рік наперед, грн-екв. (адитивне поле)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "month": { "type": "string" },
+          "amount": { "type": "number" }
+        }
+      }
+    },
+    "coupons_12m": {
+      "type": "array",
+      "description": "З них лише КУПОНИ: погашення — це повернення власного тіла, а не дохід (адитивне поле)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "month": { "type": "string" },
+          "amount": { "type": "number" }
+        }
+      }
+    },
+    "income_monthly_now": {
+      "type": "number",
+      "description": "Середній місячний купонний дохід за наступні 12 місяців, грн-екв. (адитивне поле)"
+    },
+    "month_deposited_uah": {
+      "type": "number",
+      "description": "НЕТТО нових грошей за місяць: поповнення мінус зняття, грн-екв."
+    },
+    "month_withdrawn_uah": {
+      "type": "number",
+      "description": "Самі зняття, додатнім числом — щоб UI міг показати розклад, коли нетто не збігається з сумою поповнень (адитивне поле)"
+    },
+    "accrued_uah": {
+      "type": "number",
+      "description": "Накопичений купонний дохід на сьогодні, грн-екв. (адитивне поле)"
+    },
+    "funds_yield_pct": {
+      "type": "number",
+      "description": "Дохідність сертифікатів, зважена ринковою вартістю (адитивне поле)"
+    },
+    "blended_yield_pct": {
+      "type": "number",
+      "description": "YTM облігацій і дохідність фондів разом, зважені вкладеним (адитивне поле)"
+    },
+    "actual_monthly_uah": {
+      "type": "number",
+      "description": "Фактичний темп внесків, грн/міс за вікном у півроку (адитивне поле)"
+    },
+    "actual_months": {
+      "type": "integer",
+      "description": "Скільки місяців увійшло у вимір фактичного темпу (адитивне поле)"
+    },
+    "nbu_refreshed_at": {
+      "type": "string",
+      "description": "Коли востаннє оновлювався довідник НБУ (адитивне поле)"
+    },
+    "liquidity": {
+      "type": "object",
+      "description": "Скільки грошей доступно зараз і коли звільниться решта (адитивне поле)",
+      "properties": {
+        "now_uah": { "type": "number" },
+        "in_30_uah": { "type": "number" },
+        "in_90_uah": { "type": "number" },
+        "locked_uah": { "type": "number", "description": "Замкнене у вкладах: ОБЛІГАЦІЙ тут немає навмисно — застосунок не моделює їхньої ринкової ціни" },
+        "unlock_date": { "type": "string" }
+      }
+    },
+    "forecast": {
+      "type": "object",
+      "description": "Прогноз капіталу до дати цілі: ціль одна, сценарії відрізняються ДОПУЩЕННЯМИ (адитивне поле)",
+      "properties": {
+        "date": { "type": "string" },
+        "months": { "type": "integer" },
+        "goal_amount": { "type": "number" },
+        "contrib_plan": { "type": "number" },
+        "rate0_usd": { "type": "number" },
+        "glide_years": { "type": "number" },
+        "rows": {
+          "type": "array",
+          "items": { "type": "object" }
+        }
       }
     }
   }

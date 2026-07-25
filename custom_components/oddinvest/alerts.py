@@ -72,11 +72,7 @@ class NotificationManager:
         tomorrow_s = (today + timedelta(days=1)).isoformat()
 
         if self._opt("notify_reinvest"):
-            ready = {
-                c
-                for c, m in st.reinvest_min.items()
-                if m > 0 and st.accounts.get(c, 0) >= m
-            }
+            ready = {c for c, m in st.reinvest_min.items() if m > 0 and st.accounts.get(c, 0) >= m}
             for c in sorted(ready - self._prev_ready):
                 bal = st.accounts.get(c, 0)
                 await self._send(

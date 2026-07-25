@@ -35,9 +35,7 @@ class OddInvestConfigFlow(ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
         return OddInvestOptionsFlow()
 
-    async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
             base = user_input[CONF_BASE_URL].rstrip("/")
@@ -65,17 +63,13 @@ class OddInvestConfigFlow(ConfigFlow, domain=DOMAIN):
                     data={CONF_BASE_URL: base, CONF_TOPIC_PREFIX: prefix},
                 )
 
-        return self.async_show_form(
-            step_id="user", data_schema=DATA_SCHEMA, errors=errors
-        )
+        return self.async_show_form(step_id="user", data_schema=DATA_SCHEMA, errors=errors)
 
 
 class OddInvestOptionsFlow(OptionsFlow):
     """Налаштування сповіщень: notify-сервіс + які події слати."""
 
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 

@@ -103,8 +103,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: OddInvestConfigEntry) -
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
-async def _post(hass: HomeAssistant, url: str, json_body: dict | None = None,
-                timeout_s: int = 120) -> None:
+async def _post(
+    hass: HomeAssistant, url: str, json_body: dict | None = None, timeout_s: int = 120
+) -> None:
     """POST у REST oddinvestd з нормальними помилками для UI."""
     session = async_get_clientsession(hass)
     try:
@@ -139,9 +140,7 @@ async def async_put_setting(hass: HomeAssistant, base_url: str, key: str, value:
 
 def _loaded_entries(hass: HomeAssistant) -> list[OddInvestConfigEntry]:
     return [
-        e
-        for e in hass.config_entries.async_entries(DOMAIN)
-        if e.state is ConfigEntryState.LOADED
+        e for e in hass.config_entries.async_entries(DOMAIN) if e.state is ConfigEntryState.LOADED
     ]
 
 

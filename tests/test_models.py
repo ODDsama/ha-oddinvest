@@ -13,9 +13,7 @@ import pytest
 
 # models.py навмисно вільний від залежностей HA; завантажуємо його напряму,
 # щоб contract-тести бігали без встановленого homeassistant.
-_MODELS_PATH = (
-    pathlib.Path(__file__).parents[1] / "custom_components" / "oddinvest" / "models.py"
-)
+_MODELS_PATH = pathlib.Path(__file__).parents[1] / "custom_components" / "oddinvest" / "models.py"
 _spec = importlib.util.spec_from_file_location("oddinvest_models", _MODELS_PATH)
 models = importlib.util.module_from_spec(_spec)
 sys.modules["oddinvest_models"] = models  # потрібно dataclasses для резолву анотацій

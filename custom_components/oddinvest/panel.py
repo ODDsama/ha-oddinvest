@@ -56,9 +56,7 @@ class OddInvestProxyView(HomeAssistantView):
     async def _forward(self, request: web.Request, path: str, method: str) -> web.Response:
         base = _base_url(self._hass)
         if base is None:
-            return self.json_message(
-                "ODD Invest не налаштовано", HTTPStatus.SERVICE_UNAVAILABLE
-            )
+            return self.json_message("ODD Invest не налаштовано", HTTPStatus.SERVICE_UNAVAILABLE)
         session = async_get_clientsession(self._hass)
         url = f"{base}/api/{path}"
         body = await request.read() if method in ("POST", "PUT", "PATCH") else None
@@ -155,7 +153,9 @@ async def async_setup_panel(hass: HomeAssistant) -> None:
     except Exception as err:  # noqa: BLE001
         _LOGGER.warning(
             "не вдалось змонтувати %s -> %s: %s. Якщо панель порожня — причина тут",
-            static_root, www_dir, err,
+            static_root,
+            www_dir,
+            err,
         )
 
     # Панель уже могла бути зареєстрована зі старою адресою — знімаємо,

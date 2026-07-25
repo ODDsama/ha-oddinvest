@@ -23,8 +23,23 @@ jobs:
             https://raw.githubusercontent.com/ODDsama/oddinvest/main/contract/fixtures/empty.json
           curl -fsSL -o tests/fixtures/oddinvest-state.schema.json \
             https://raw.githubusercontent.com/ODDsama/oddinvest/main/contract/oddinvest-state.schema.json
-      - run: pip install pytest jsonschema
+      # Версії закріплені: плаваючі перетворюють щотижневий cron на джерело
+      # червоного з причин, не пов'язаних із контрактом, а на таке швидко
+      # вчишся не дивитись.
+      - run: pip install pytest==8.3.4 jsonschema==4.23.0
       - run: pytest -q
+
+  lint:
+    name: ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      # ruff уже налаштований у pyproject.toml — його просто ніхто не кликав.
+      - run: pip install ruff==0.8.6
+      - run: ruff check .
+      - run: ruff format --check .
 
   ui-drift:
     name: спільний UI не розійшовся з oddinvest

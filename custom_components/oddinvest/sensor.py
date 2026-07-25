@@ -57,10 +57,7 @@ def _next_payment_attrs(doc: StateDoc) -> dict[str, Any] | None:
 
 def _ladder_attrs(doc: StateDoc) -> dict[str, Any]:
     return {
-        "ladder": [
-            {"year": r.year, "uah": r.uah, "usd": r.usd, "eur": r.eur}
-            for r in doc.ladder
-        ]
+        "ladder": [{"year": r.year, "uah": r.uah, "usd": r.usd, "eur": r.eur} for r in doc.ladder]
     }
 
 
@@ -196,9 +193,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     data = entry.runtime_data
-    async_add_entities(
-        OddInvestSensor(data, entry.entry_id, desc) for desc in SENSORS
-    )
+    async_add_entities(OddInvestSensor(data, entry.entry_id, desc) for desc in SENSORS)
 
 
 class OddInvestSensor(OddInvestEntity, SensorEntity):

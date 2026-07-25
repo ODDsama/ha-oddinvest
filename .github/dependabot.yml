@@ -1,0 +1,18 @@
+# Оновлення залежностей.
+#
+# Сама інтеграція залежностей не має (requirements: [] у manifest.json) —
+# усе потрібне дає Home Assistant. Але CI ставить pytest, jsonschema і ruff
+# закріпленими версіями, і без нагляду вони застигнуть назавжди.
+#
+# github-actions тут особливо доречний: hacs/action і hassfest досі
+# закріплені на гілках (@main і @master), тобто змінюються під ногами без
+# жодного сліду в історії репозиторію.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule: { interval: weekly }
+
+  - package-ecosystem: pip
+    directory: "/"
+    schedule: { interval: weekly }

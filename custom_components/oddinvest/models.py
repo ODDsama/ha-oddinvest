@@ -167,12 +167,8 @@ class StateDoc:
                 )
                 for r in raw["ladder"]
             ),
-            top_payments=tuple(
-                _payment_row(p) for p in raw["top_payments"]
-            ),
-            calendar=tuple(
-                _payment_row(p) for p in raw.get("calendar", ())
-            ),
+            top_payments=tuple(_payment_row(p) for p in raw["top_payments"]),
+            calendar=tuple(_payment_row(p) for p in raw.get("calendar", ())),
             settings=_settings(raw.get("settings")),
             xirr={str(k): float(v) for k, v in (raw.get("xirr") or {}).items()},
         )
