@@ -122,10 +122,14 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=0,
-        # Капітал — усе, що працює: папери, гроші, сертифікати фондів і
-        # тіло банківських вкладів. Без будь-якого доданка сенсор занижував
-        # би капітал на його вартість.
-        value_fn=lambda d: d.nominal_uah_eq + d.account_uah + d.funds_uah + d.deposits_uah,
+        # Капітал — усе, що в тебе є: папери, гроші, сертифікати фондів,
+        # тіло банківських вкладів і резерв. Без будь-якого доданка сенсор
+        # занижував би капітал на його вартість. Резерв входить попри те,
+        # що не працює: це твої гроші, і вони або в капіталі, або ніде.
+        value_fn=lambda d: (
+            d.nominal_uah_eq + d.account_uah + d.funds_uah + d.deposits_uah + d.reserve_uah
+        ),
+        attrs_fn=lambda d: {"reserve_uah": d.reserve_uah} if d.reserve_uah else None,
     ),
     OddInvestSensorDescription(
         key="month_invested_uah",
