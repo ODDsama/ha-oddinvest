@@ -98,9 +98,6 @@
       }
     },
     "number": {
-      "monthly_target_uah": {
-        "name": "Ціль на місяць"
-      },
       "usd_target_share_pct": {
         "name": "Цільова частка USD"
       },

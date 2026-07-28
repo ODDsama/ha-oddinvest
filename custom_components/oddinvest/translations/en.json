@@ -98,9 +98,6 @@
       }
     },
     "number": {
-      "monthly_target_uah": {
-        "name": "Monthly target"
-      },
       "usd_target_share_pct": {
         "name": "Target USD share"
       },

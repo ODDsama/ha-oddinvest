@@ -15,14 +15,15 @@ jobs:
         with: { python-version: "3.12" }
       # Рішення №5 концепції: фікстури живуть у репозиторії сервіса,
       # CI інтеграції завжди тестується проти його main-гілки.
+      #
+      # Спершу ЗВІРКА, а тоді вже стягування. Доти CI просто перезаписував
+      # локальні копії, тож їхня застарілість була невидима: тести на
+      # машині розробника бігали проти вчорашньої схеми й проходили, а
+      # розбіжність доростала до тисяч байтів і не спливала ніде.
+      - name: Локальні фікстури не застаріли
+        run: sh scripts/sync-contract.sh --check
       - name: Стягнути актуальний контракт
-        run: |
-          curl -fsSL -o tests/fixtures/basic.json \
-            https://raw.githubusercontent.com/ODDsama/oddinvest/main/contract/fixtures/basic.json
-          curl -fsSL -o tests/fixtures/empty.json \
-            https://raw.githubusercontent.com/ODDsama/oddinvest/main/contract/fixtures/empty.json
-          curl -fsSL -o tests/fixtures/oddinvest-state.schema.json \
-            https://raw.githubusercontent.com/ODDsama/oddinvest/main/contract/oddinvest-state.schema.json
+        run: sh scripts/sync-contract.sh
       # Версії закріплені: плаваючі перетворюють щотижневий cron на джерело
       # червоного з причин, не пов'язаних із контрактом, а на таке швидко
       # вчишся не дивитись.

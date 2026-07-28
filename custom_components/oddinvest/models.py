@@ -51,10 +51,14 @@ class PaymentRow:
 
 @dataclass(frozen=True)
 class Settings:
+    # monthly_target_uah — місячний план. ПОХІДНЕ значення: виводиться з
+    # цілі й дедлайну, задати його не можна. Довго воно й не приходило
+    # зовсім — гілка, що його публікувала, у бекенді була недосяжна.
     monthly_target_uah: float | None = None
     usd_target_share_pct: float | None = None
     eur_target_share_pct: float | None = None
-    assumed_rate_pct: float | None = None
+    # assumed_rate_pct прибрано разом із полем у бекенді: воно не
+    # читалось ніким, а ставку проєкції давно дає portfolio_yield.
     goal_amount_uah: float | None = None
     goal_date: str | None = None
 
@@ -192,7 +196,6 @@ def _settings(raw: dict[str, Any] | None) -> Settings | None:
         monthly_target_uah=num("monthly_target_uah"),
         usd_target_share_pct=num("usd_target_share_pct"),
         eur_target_share_pct=num("eur_target_share_pct"),
-        assumed_rate_pct=num("assumed_rate_pct"),
         goal_amount_uah=num("goal_amount_uah"),
         goal_date=str(gd) if gd else None,
     )

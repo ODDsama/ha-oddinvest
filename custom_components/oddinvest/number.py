@@ -11,7 +11,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from homeassistant.components.number import (
-    NumberDeviceClass,
     NumberEntity,
     NumberEntityDescription,
     NumberMode,
@@ -31,19 +30,14 @@ class OddInvestNumberDescription(NumberEntityDescription):
     to_payload: Callable[[float], str] = lambda v: f"{v:g}"
 
 
+# Тут лише те, що справді МОЖНА задати.
+#
+# `monthly_target_uah` звідси прибрано: бекенд перестав приймати цей ключ
+# (місячний план тепер виводиться з цілі й дедлайну, а не вводиться), тож
+# кожен рух повзунка давав 400. Сутність жила далі й показувала порожнє —
+# зламана з обох боків. Значення лишається видимим, але сенсором:
+# «Місячний план» у sensor.py.
 NUMBERS: tuple[OddInvestNumberDescription, ...] = (
-    OddInvestNumberDescription(
-        key="monthly_target_uah",
-        translation_key="monthly_target_uah",
-        setting_key="monthly_target_uah",
-        native_unit_of_measurement="UAH",
-        device_class=NumberDeviceClass.MONETARY,
-        mode=NumberMode.BOX,
-        native_min_value=0,
-        native_max_value=10_000_000,
-        native_step=100,
-        value_fn=lambda s: s.monthly_target_uah,
-    ),
     OddInvestNumberDescription(
         key="usd_target_share_pct",
         translation_key="usd_target_share_pct",
