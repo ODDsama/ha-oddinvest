@@ -320,6 +320,22 @@ function body(path) {
     portfolio_uah: 244446.80, benchmark_uah: 251300, diff_uah: -6853.20,
     diff_pct: -2.73, usd_bought: 5608.35, rate_now: 44.81,
   });
+  // Крива первинного ринку. Навмисно НЕ монотонна (трирічні дають менше
+  // за дворічні) — так буває насправді, і картка не має цього ховати.
+  // Дворічний строк без «рік тому»: його тоді просто не розміщували, і
+  // порівнювати нема з чим.
+  if (key === "auctions/curve") return Promise.resolve([
+    { currency: "UAH", bucket: "1y", days: 343, pct: 15.19, date: "2026-08-11",
+      isin: "UA4000239016", prev_pct: 17.80, prev_date: "2025-08-12" },
+    { currency: "UAH", bucket: "1.5y", days: 623, pct: 15.65, date: "2026-08-11",
+      isin: "UA4000239040", prev_pct: 18.10, prev_date: "2025-07-15" },
+    { currency: "UAH", bucket: "2y", days: 910, pct: 16.10, date: "2026-08-11",
+      isin: "UA4000239107" },
+    { currency: "UAH", bucket: "3y", days: 1106, pct: 12.69, date: "2026-08-04",
+      isin: "UA4000239099", prev_pct: 14.20, prev_date: "2025-09-02" },
+    { currency: "EUR", bucket: "1.5y", days: 548, pct: 3.20, date: "2026-07-07",
+      isin: "UA4000239065", prev_pct: 2.95, prev_date: "2025-07-08" },
+  ]);
   // Податок. Три інструменти з трьома різними ставками — саме та
   // асиметрія, яку картка й має показати грошима: 0%, 14%, 19.5%.
   if (key === "tax") return Promise.resolve({
