@@ -77,6 +77,24 @@
       },
       "xirr_eur": {
         "name": "XIRR євро"
+      },
+      "income_monthly_now": {
+        "name": "Дохід на місяць"
+      },
+      "accrued_uah": {
+        "name": "Накопичений купон"
+      },
+      "blended_yield_pct": {
+        "name": "Дохідність портфеля"
+      },
+      "independence_date": {
+        "name": "Точка незалежності"
+      },
+      "liquidity_in_30_uah": {
+        "name": "Доступно за 30 днів"
+      },
+      "reserve_months": {
+        "name": "Резерв у місяцях"
       }
     },
     "binary_sensor": {

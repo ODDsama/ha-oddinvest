@@ -77,6 +77,24 @@
       },
       "xirr_eur": {
         "name": "XIRR EUR"
+      },
+      "income_monthly_now": {
+        "name": "Monthly income now"
+      },
+      "accrued_uah": {
+        "name": "Accrued coupon"
+      },
+      "blended_yield_pct": {
+        "name": "Portfolio yield"
+      },
+      "independence_date": {
+        "name": "Independence date"
+      },
+      "liquidity_in_30_uah": {
+        "name": "Available in 30 days"
+      },
+      "reserve_months": {
+        "name": "Reserve, months"
       }
     },
     "binary_sensor": {

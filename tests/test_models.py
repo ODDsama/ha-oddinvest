@@ -132,6 +132,78 @@ def test_payment_label_absent_on_old_service():
     assert all(p.label == "" for p in doc.calendar)
 
 
+def test_rich_scalars_parsed():
+    """Показники, що доти жили лише у веб-інтерфейсі."""
+    doc = StateDoc.from_payload(load("basic.json"))
+    assert doc.income_monthly_now == 1240.5
+    assert doc.accrued_uah == 812.33
+    assert doc.blended_yield_pct == 14.10
+    assert doc.blended_yield_real_pct == 6.85
+    assert doc.portfolio_yield_pct == 14.93
+    assert doc.funds_yield_pct == 11.20
+    assert doc.nbu_refreshed_at == "2026-07-15T06:10:00Z"
+
+
+def test_nested_objects_parsed():
+    doc = StateDoc.from_payload(load("basic.json"))
+    assert doc.independence is not None
+    assert doc.independence.plan_date == "2044-05-15"
+    assert doc.independence.target_from == "expenses"
+    # plan_months — саме int, хоч JSON не розрізняє цілих і дробових.
+    assert isinstance(doc.independence.plan_months, int)
+
+    assert doc.liquidity is not None
+    assert doc.liquidity.in_30_uah == 5637.5
+    assert doc.liquidity.locked_uah == 120000
+
+    assert doc.reserve is not None
+    assert doc.reserve.months == 2
+    assert doc.reserve.gap_uah == 30000
+
+    assert len(doc.concentration) == 2
+    over = [c for c in doc.concentration if c.over_uah > 0]
+    assert len(over) == 1
+    assert over[0].dimension == "isin"
+    assert over[0].label == "валютні військові"
+
+
+def test_nested_objects_absent_on_old_service():
+    """Старіший сервіс цих обʼєктів не надсилає — None, а не порожній обʼєкт.
+
+    Різниця має значення: None читається сутністю як unknown, а обʼєкт із
+    нулями показав би «резерв на 0 місяців» там, де про резерв просто не
+    питали.
+    """
+    raw = json.loads(load("basic.json"))
+    for k in ("independence", "liquidity", "reserve", "concentration"):
+        raw.pop(k, None)
+    doc = StateDoc.from_payload(json.dumps(raw))
+    assert doc.independence is None
+    assert doc.liquidity is None
+    assert doc.reserve is None
+    assert doc.concentration == ()
+
+
+def test_nested_object_ignores_unknown_fields():
+    """Нове поле сервіса всередині вкладеного обʼєкта не валить парсер.
+
+    Правило «тільки додавання» на боці сервіса стосується й вкладених
+    обʼєктів, а не лише верхнього рівня.
+    """
+    raw = json.loads(load("basic.json"))
+    raw["liquidity"]["in_7_uah"] = 123.45
+    doc = StateDoc.from_payload(json.dumps(raw))
+    assert doc.liquidity.in_30_uah == 5637.5
+
+
+def test_empty_fixture_has_no_nested_objects():
+    """Порожній портфель: обʼєктів немає, і це не помилка."""
+    doc = StateDoc.from_payload(load("empty.json"))
+    assert doc.independence is None
+    assert doc.reserve is None
+    assert doc.income_monthly_now == 0
+
+
 def test_settings_parsed():
     doc = StateDoc.from_payload(load("basic.json"))
     assert doc.settings is not None

@@ -13,7 +13,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Any
 
 SUPPORTED_SCHEMA = 1
@@ -57,6 +57,70 @@ class PaymentRow:
     def title(self) -> str:
         """Як називати цей рядок людині."""
         return self.label or self.isin
+
+
+@dataclass(frozen=True)
+class Independence:
+    """Коли портфель почне утримувати сам себе.
+
+    plan_* — за плановим внеском, actual_* — за фактичним темпом
+    поповнень. plan_months == -1 означає «дохід уже покриває», 0 — «не
+    досягається за 60 років»; дата в обох випадках порожня.
+    """
+
+    target_uah: float = 0.0
+    income_now_uah: float = 0.0
+    target_from: str = ""
+    plan_months: int = 0
+    plan_date: str = ""
+    actual_months: int = 0
+    actual_date: str = ""
+
+
+@dataclass(frozen=True)
+class Liquidity:
+    """Коли гроші стають доступні — питання не про дохідність.
+
+    reserve_uah окремо від now_uah навмисно: на боці сервіса на цьому
+    тримається інваріант now_uah == account_uah.
+    """
+
+    now_uah: float = 0.0
+    in_30_uah: float = 0.0
+    in_90_uah: float = 0.0
+    reserve_uah: float = 0.0
+    locked_uah: float = 0.0
+    unlock_date: str = ""
+
+
+@dataclass(frozen=True)
+class Reserve:
+    """Матрац: скільки відкладено й на скільки місяців життя цього стане."""
+
+    uah: float = 0.0
+    share_pct: float = 0.0
+    months: float = 0.0
+    target_months: float = 0.0
+    target_uah: float = 0.0
+    gap_uah: float = 0.0
+    monthly_expenses_uah: float = 0.0
+
+
+@dataclass(frozen=True)
+class ConcentrationRow:
+    """Один вимір концентрації: папір, установа або рік погашень.
+
+    over_uah > 0 означає перевищення заданого ліміту. Ліміт — це стеля,
+    а не ціль, і перевищення нічого не забороняє: сервіс порад не дає.
+    """
+
+    dimension: str = ""
+    key: str = ""
+    amount_uah: float = 0.0
+    share_pct: float = 0.0
+    limit_pct: float = 0.0
+    over_uah: float = 0.0
+    label: str = ""
 
 
 @dataclass(frozen=True)
@@ -117,6 +181,29 @@ class StateDoc:
     settings: Settings | None = None
     # v1.0+: річний XIRR по валютах, %; порожній dict = нерахований
     xirr: dict[str, float] = field(default_factory=dict)
+
+    # Нижче — те, що доти жило лише у веб-інтерфейсі. Усе необовʼязкове:
+    # старіший сервіс цих полів не надсилає, і сутність тоді читається як
+    # unknown, що чесніше за нуль.
+    #
+    # income_monthly_now — скільки портфель приносить ЩОМІСЯЦЯ вже зараз.
+    income_monthly_now: float = 0.0
+    # accrued_uah — накопичений, ще не виплачений купон.
+    accrued_uah: float = 0.0
+    # Дохідності. У сутність іде ОДНА (blended_*), решта — атрибутами:
+    # три сусідні числа, кожне з яких зветься «моя дохідність», — це рівно
+    # та хвороба, від якої лікує capital_uah.
+    blended_yield_pct: float = 0.0
+    blended_yield_real_pct: float = 0.0
+    portfolio_yield_pct: float = 0.0
+    funds_yield_pct: float = 0.0
+    # nbu_refreshed_at — коли востаннє оновлювався довідник НБУ, RFC3339.
+    # Порожній рядок = сервіс поля не надсилає (див. nbu_age_hours).
+    nbu_refreshed_at: str = ""
+    independence: Independence | None = None
+    liquidity: Liquidity | None = None
+    reserve: Reserve | None = None
+    concentration: tuple[ConcentrationRow, ...] = field(default_factory=tuple)
 
     REQUIRED = (
         "schema",
@@ -226,7 +313,50 @@ class StateDoc:
             calendar=tuple(_payment_row(p) for p in raw.get("calendar", ())),
             settings=_settings(raw.get("settings")),
             xirr={str(k): float(v) for k, v in (raw.get("xirr") or {}).items()},
+            income_monthly_now=float(raw.get("income_monthly_now", 0.0)),
+            accrued_uah=float(raw.get("accrued_uah", 0.0)),
+            blended_yield_pct=float(raw.get("blended_yield_pct", 0.0)),
+            blended_yield_real_pct=float(raw.get("blended_yield_real_pct", 0.0)),
+            portfolio_yield_pct=float(raw.get("portfolio_yield_pct", 0.0)),
+            funds_yield_pct=float(raw.get("funds_yield_pct", 0.0)),
+            nbu_refreshed_at=str(raw.get("nbu_refreshed_at", "")),
+            independence=_dc(Independence, raw.get("independence")),
+            liquidity=_dc(Liquidity, raw.get("liquidity")),
+            reserve=_dc(Reserve, raw.get("reserve")),
+            concentration=tuple(_dc(ConcentrationRow, r) for r in (raw.get("concentration") or ())),
         )
+
+
+def _dc(cls, raw: dict[str, Any] | None):
+    """Обʼєкт контракту → дата-клас, полями лише з нього.
+
+    Один помічник на всі вкладені обʼєкти замість чотирьох майже
+    однакових функцій. Робить рівно те, що вимагають правила читання
+    контракту в шапці модуля:
+
+    - НЕВІДОМІ поля документа ігноруються (сервіс еволюціонує додаванням,
+      і нове поле не має валити стару інтеграцію);
+    - ВІДСУТНІ поля лишаються дефолтами дата-класу, тобто старіший сервіс
+      теж читається;
+    - тип береться з анотації поля, тож float залишається float навіть
+      коли JSON приніс ціле.
+
+    None на вході означає «сервіс цього не надсилає» і дає None на виході —
+    відрізнити це від «усі нулі» важливо, бо перше означає старий бекенд,
+    а друге — порожній портфель.
+    """
+    if not raw:
+        return None
+    kinds = {f.name: f.type for f in fields(cls)}
+    kwargs: dict[str, Any] = {}
+    for name, kind in kinds.items():
+        if name not in raw or raw[name] is None:
+            continue
+        v = raw[name]
+        # Анотації тут рядкові (from __future__ import annotations), тож
+        # звіряємось із назвою типу, а не з самим типом.
+        kwargs[name] = int(v) if kind == "int" else float(v) if kind == "float" else str(v)
+    return cls(**kwargs)
 
 
 def _settings(raw: dict[str, Any] | None) -> Settings | None:
