@@ -103,6 +103,12 @@
       },
       "reinvest_ready": {
         "name": "Reinvest ready"
+      },
+      "data_stale": {
+        "name": "Data is stale"
+      },
+      "concentration_breach": {
+        "name": "Concentration limit exceeded"
       }
     },
     "calendar": {

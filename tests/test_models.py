@@ -8,6 +8,7 @@ import importlib.util
 import json
 import pathlib
 import sys
+from datetime import date, datetime, timezone
 
 import pytest
 
@@ -202,6 +203,64 @@ def test_empty_fixture_has_no_nested_objects():
     assert doc.independence is None
     assert doc.reserve is None
     assert doc.income_monthly_now == 0
+
+
+def test_age_hours_distinguishes_absent_from_fresh():
+    """Немає мітки — це None, а не «нуль годин».
+
+    Плутати їх означало б тихо вважати старіший сервіс, який
+    nbu_refreshed_at не надсилає, вічно свіжим — тобто сенсор
+    «дані застаріли» ніколи б на ньому не спрацював.
+    """
+    doc = StateDoc.from_payload(load("basic.json"))
+    now = datetime(2026, 7, 15, 12, 0, tzinfo=timezone.utc)
+    # generated_at = 2026-07-15T10:00:00Z → дві години
+    assert doc.age_hours(now) == pytest.approx(2.0)
+    # nbu_refreshed_at = 06:10 того ж дня
+    assert doc.nbu_age_hours(now) == pytest.approx(5.833, abs=0.01)
+
+    raw = json.loads(load("basic.json"))
+    raw.pop("nbu_refreshed_at")
+    old = StateDoc.from_payload(json.dumps(raw))
+    assert old.nbu_age_hours(now) is None
+    assert old.age_hours(now) == pytest.approx(2.0)
+
+
+def test_age_hours_survives_garbage_stamp():
+    """Зіпсована мітка не валить інтеграцію — вона просто невідома."""
+    raw = json.loads(load("basic.json"))
+    raw["nbu_refreshed_at"] = "не-дата"
+    doc = StateDoc.from_payload(json.dumps(raw))
+    assert doc.nbu_age_hours(datetime(2026, 7, 15, 12, 0, tzinfo=timezone.utc)) is None
+
+
+def test_breaches_only_over_limit():
+    """Перевищення — це over_uah > 0, а не «є ліміт»."""
+    doc = StateDoc.from_payload(load("basic.json"))
+    assert len(doc.concentration) == 2
+    br = doc.breaches()
+    assert len(br) == 1
+    assert br[0].key == "UA4000230114"
+    # Рядок у межах ліміту показується, але порушенням не рахується:
+    # «45% при ліміті 50%» теж варте знання.
+    assert any(c.over_uah == 0 for c in doc.concentration)
+
+
+def test_redemptions_within_ignores_coupons():
+    """Погашення ≠ купон.
+
+    Купон приходить і йде далі; погашення повертає ТІЛО, і воно або піде
+    за новою ставкою, або ляже мертвим вантажем. Сповіщати варто про друге.
+    """
+    doc = StateDoc.from_payload(load("basic.json"))
+    # У фікстурі погашення одне — 2027-03-17.
+    assert doc.redemptions_within(7, date(2026, 7, 15)) == ()
+    soon = doc.redemptions_within(7, date(2027, 3, 15))
+    assert len(soon) == 1
+    assert soon[0].type == "redemption"
+    assert soon[0].date == "2027-03-17"
+    # Купони в найближчі дні є, але сюди не потрапляють.
+    assert doc.redemptions_within(400, date(2026, 7, 15))[0].type == "redemption"
 
 
 def test_settings_parsed():

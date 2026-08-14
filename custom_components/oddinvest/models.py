@@ -14,9 +14,28 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field, fields
+from datetime import date, datetime, timedelta
 from typing import Any
 
 SUPPORTED_SCHEMA = 1
+
+
+def _age_hours(stamp: str, now: datetime) -> float | None:
+    """Вік мітки часу RFC3339 у годинах. None, якщо мітки немає.
+
+    None і 0 тут різні речі: перше означає «сервіс такого не надсилає»
+    (старіша версія), друге — «щойно оновлено». Плутати їх означало б
+    тихо вважати старий сервіс завжди свіжим.
+    """
+    if not stamp:
+        return None
+    try:
+        t = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=now.tzinfo)
+    return (now - t).total_seconds() / 3600
 
 
 class ContractError(ValueError):
@@ -246,6 +265,43 @@ class StateDoc:
             + self.deposits_uah
             + self.reserve_uah
         )
+
+    def age_hours(self, now: datetime) -> float | None:
+        """Скільки годин минуло відколи сервіс зібрав цей документ."""
+        return _age_hours(self.generated_at, now)
+
+    def nbu_age_hours(self, now: datetime) -> float | None:
+        """Скільки годин довіднику НБУ. None = сервіс поля не надсилає."""
+        return _age_hours(self.nbu_refreshed_at, now)
+
+    def breaches(self) -> tuple[ConcentrationRow, ...]:
+        """Виміри, де заданий ліміт концентрації перевищено.
+
+        Перевищення нічого не забороняє й нічого не ховає — сервіс порад
+        не дає. Це спостереження, і воно варте сповіщення саме тому, що
+        інакше лишається непоміченим до наступного погляду на екран.
+        """
+        return tuple(c for c in self.concentration if c.over_uah > 0)
+
+    def redemptions_within(self, days: int, now: date) -> tuple[PaymentRow, ...]:
+        """Погашення (паперів і вкладів) у найближчі `days` днів.
+
+        Саме погашення, не купони: купон приходить і йде далі, а погашення
+        повертає ТІЛО — і воно або піде за новою ставкою, або ляже мертвим
+        вантажем на рахунку. Це рішення, а не подія.
+        """
+        limit = now + timedelta(days=days)
+        out = []
+        for p in self.calendar:
+            if p.type != "redemption":
+                continue
+            try:
+                d = date.fromisoformat(p.date)
+            except ValueError:
+                continue
+            if now <= d <= limit:
+                out.append(p)
+        return tuple(out)
 
     @classmethod
     def from_payload(cls, payload: str | bytes) -> "StateDoc":

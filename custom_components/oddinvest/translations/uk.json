@@ -103,6 +103,12 @@
       },
       "reinvest_ready": {
         "name": "Можна реінвестувати"
+      },
+      "data_stale": {
+        "name": "Дані застаріли"
+      },
+      "concentration_breach": {
+        "name": "Ліміт концентрації перевищено"
       }
     },
     "calendar": {
