@@ -10,7 +10,9 @@
 #   sh scripts/sync-contract.sh --check            — лише звірити
 #   sh scripts/sync-contract.sh --from ../oddinvest — узяти з локальної копії
 #
-# Той самий інтерфейс, що й у sync-ui.sh: різні речі, але звичка одна.
+# Донедавна поруч жив sync-ui.sh з тим самим інтерфейсом — він вендорив
+# збірку UI під бічну панель. Панелі більше немає, і цей скрипт лишився
+# ЄДИНИМ мостом між репозиторіями: фікстури контракту, і більше нічого.
 set -eu
 
 RAW=https://raw.githubusercontent.com/ODDsama/oddinvest/main

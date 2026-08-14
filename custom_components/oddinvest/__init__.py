@@ -24,7 +24,6 @@ from .const import (
 )
 from .alerts import NotificationManager
 from .models import ContractError, StateDoc
-from .panel import async_setup_panel
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -81,7 +80,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: OddInvestConfigEntry) ->
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _register_services(hass)
-    await async_setup_panel(hass)
 
     data.alerts = NotificationManager(hass, entry)
     await data.alerts.async_setup()
