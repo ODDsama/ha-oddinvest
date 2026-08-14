@@ -123,12 +123,15 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=0,
         # Капітал — усе, що в тебе є: папери, гроші, сертифікати фондів,
-        # тіло банківських вкладів і резерв. Без будь-якого доданка сенсор
-        # занижував би капітал на його вартість. Резерв входить попри те,
-        # що не працює: це твої гроші, і вони або в капіталі, або ніде.
-        value_fn=lambda d: (
-            d.nominal_uah_eq + d.account_uah + d.funds_uah + d.deposits_uah + d.reserve_uah
-        ),
+        # тіло банківських вкладів і резерв. Резерв входить попри те, що
+        # не працює: це твої гроші, і вони або в капіталі, або ніде.
+        #
+        # Сума ЖИВЕ НЕ ТУТ. Сервіс публікує capital_uah готовим числом, і
+        # StateDoc.capital() бере саме його, лишаючи складання запасним
+        # шляхом для старішого бекенда. Доти цей рядок складав ту саму суму
+        # самостійно — тобто був пʼятим визначенням капіталу в застосунку,
+        # де поле capital_uah зʼявилось якраз щоб визначення було одне.
+        value_fn=lambda d: d.capital(),
         attrs_fn=lambda d: {"reserve_uah": d.reserve_uah} if d.reserve_uah else None,
     ),
     OddInvestSensorDescription(

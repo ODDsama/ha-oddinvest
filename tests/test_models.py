@@ -46,10 +46,16 @@ def test_parse_basic_fixture():
     assert doc.uninvested_uah == 0
     assert doc.eur_share_pct == 0
 
+    # Найближча виплата у фікстурі — відсотки ВКЛАДУ, а не купон паперу.
+    # Вклад ходить у розкладі під синтетичним "deposit:<id>", і саме на
+    # ньому схема сервіса колись сама себе не проходила (вимагала від isin
+    # патерн UA[0-9A-Z]{10}). Тепер цей випадок у фікстурі є, тож
+    # test_fixture_matches_schema вище його й перевіряє.
     assert doc.next_payment is not None
-    assert doc.next_payment.date == "2026-07-20"
+    assert doc.next_payment.date == "2026-07-18"
+    assert doc.next_payment.isin == "deposit:1"
     assert doc.next_payment.type == "coupon"
-    assert doc.next_payment.amount == 4137.5
+    assert doc.next_payment.amount == 300
     assert doc.next_payment.currency == "UAH"
 
     assert len(doc.ladder) == 1
@@ -58,12 +64,72 @@ def test_parse_basic_fixture():
     assert doc.ladder[0].usd == 2000
     assert doc.ladder[0].eur == 0
 
-    assert len(doc.top_payments) == 3
+    assert len(doc.top_payments) == 4
     assert doc.top_payments[-1].type == "redemption"
 
     # v0.2: повний календар (у фікстурі збігається з top_payments)
-    assert len(doc.calendar) == 3
-    assert doc.calendar[0].date == "2026-07-20"
+    assert len(doc.calendar) == 4
+    assert doc.calendar[0].date == "2026-07-18"
+
+
+def test_capital_uah_parsed():
+    """Капітал приходить готовим числом і береться саме воно."""
+    doc = StateDoc.from_payload(load("basic.json"))
+    # 138 246.80 номіналу + 60 000 резерву
+    assert doc.capital_uah == 198246.8
+    assert doc.capital() == 198246.8
+
+
+def test_capital_falls_back_to_sum():
+    """Без capital_uah капітал складається з частин — але лише тоді.
+
+    Це шлях для СТАРІШОГО сервіса. Перевіряємо його на тій самій фікстурі
+    з видаленим полем, щоб сума звірялась із числом, яке сервіс і сам
+    порахував: якщо вони розійдуться, розійшлись саме визначення капіталу,
+    а це рівно та вада, заради якої поле й зʼявилось у контракті.
+    """
+    raw = json.loads(load("basic.json"))
+    expected = raw.pop("capital_uah")
+    doc = StateDoc.from_payload(json.dumps(raw))
+    assert doc.capital_uah is None
+    assert doc.capital() == expected
+
+
+def test_capital_zero_is_not_absent():
+    """Нуль від сервіса — це нуль, а не «поля немає».
+
+    Порожній портфель законно має капітал 0. Якби capital_uah зберігалось
+    як 0.0 замість None, цей випадок був би невідрізнимий від старого
+    сервіса, і сенсор мовчки перейшов би на складання частин — тобто на
+    друге визначення капіталу, саме там, де перевірити його найважче.
+    """
+    raw = json.loads(load("basic.json"))
+    raw["capital_uah"] = 0
+    # Частини лишаємо ненульовими: сума дала б 198 246.80, і якби запасний
+    # шлях увімкнувся помилково, це було б видно.
+    doc = StateDoc.from_payload(json.dumps(raw))
+    assert doc.capital_uah == 0
+    assert doc.capital() == 0
+
+
+def test_payment_label_parsed():
+    """Підпис виплати читається з документа, а не вигадується клієнтом."""
+    doc = StateDoc.from_payload(load("basic.json"))
+    assert doc.next_payment.label == "вклад"
+    # В облігації підпис порожній: її ISIN і є назвою.
+    bond = next(p for p in doc.calendar if p.isin.startswith("UA"))
+    assert bond.label == ""
+
+
+def test_payment_label_absent_on_old_service():
+    """Старіший сервіс label не надсилає — рядок лишається без підпису."""
+    raw = json.loads(load("basic.json"))
+    for p in raw["calendar"] + raw["top_payments"]:
+        p.pop("label", None)
+    raw["next_payment"].pop("label", None)
+    doc = StateDoc.from_payload(json.dumps(raw))
+    assert doc.next_payment.label == ""
+    assert all(p.label == "" for p in doc.calendar)
 
 
 def test_settings_parsed():

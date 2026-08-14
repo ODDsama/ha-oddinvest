@@ -30,6 +30,11 @@ class NextPayment:
     type: str
     amount: float
     currency: str
+    # label — людська назва, коли ISIN мовчить: «вклад» для синтетичного
+    # "deposit:<id>". Правило живе в сервісі й приходить готовим — доти
+    # воно було записане у фронтенді, і сповіщення тут написали б його
+    # втретє, третьою мовою.
+    label: str = ""
 
 
 @dataclass(frozen=True)
@@ -47,6 +52,11 @@ class PaymentRow:
     type: str
     amount: float
     currency: str
+    label: str = ""  # див. NextPayment.label
+
+    def title(self) -> str:
+        """Як називати цей рядок людині."""
+        return self.label or self.isin
 
 
 @dataclass(frozen=True)
@@ -89,6 +99,13 @@ class StateDoc:
     # інструмент: дохідності в нього немає, і в купівельну спроможність він
     # не входить. Необов'язкове з тієї ж причини, що й попередні два.
     reserve_uah: float = 0.0
+    # capital_uah — УВЕСЬ капітал одним числом від сервіса.
+    #
+    # None, а НЕ 0.0, і це не педантизм: порожній портфель законно має
+    # капітал нуль, тож нулем не відрізнити «сервіс сказав 0» від «сервіс
+    # старий і поля не надсилає». Саме на цій різниці стоїть capital()
+    # нижче.
+    capital_uah: float | None = None
     reinvest_min_uah: float = 0.0
     accounts: dict[str, float] = field(default_factory=dict)
     reinvest_min: dict[str, float] = field(default_factory=dict)
@@ -115,6 +132,33 @@ class StateDoc:
         "ladder",
         "top_payments",
     )
+
+    def capital(self) -> float:
+        """Увесь капітал, грн-екв.
+
+        Бере ГОТОВЕ число сервіса, коли воно є. Складання лишається
+        запасним шляхом для старішого бекенда — і саме запасним, а не
+        основним.
+
+        Різниця тут не косметична. Поле capital_uah зʼявилось у контракті
+        рівно тому, що капітал збирали чотирма способами водночас, і плитка
+        на екрані казала 57.6%, а картка ребалансу поруч — 0%. У JS цей
+        висновок уже застосований (web/js/format.js, capitalUAH: спершу
+        готове поле, сума лише як запасний шлях), а тут та сама сума
+        складалась заново — тобто та сама вада, відтворена другою мовою.
+
+        Метод живе на StateDoc, а не в sensor.py, щоб правило було в межах
+        pytest: у цьому репозиторії тестується парсер, а не сутності.
+        """
+        if self.capital_uah is not None:
+            return self.capital_uah
+        return (
+            self.nominal_uah_eq
+            + self.account_uah
+            + self.funds_uah
+            + self.deposits_uah
+            + self.reserve_uah
+        )
 
     @classmethod
     def from_payload(cls, payload: str | bytes) -> "StateDoc":
@@ -145,6 +189,7 @@ class StateDoc:
                 type=str(p["type"]),
                 amount=float(p["amount"]),
                 currency=str(p["currency"]),
+                label=str(p.get("label", "")),
             )
 
         return cls(
@@ -164,6 +209,7 @@ class StateDoc:
             funds_uah=float(raw.get("funds_uah", 0.0)),
             deposits_uah=float(raw.get("deposits_uah", 0.0)),
             reserve_uah=float(raw.get("reserve_uah", 0.0)),
+            capital_uah=(float(raw["capital_uah"]) if raw.get("capital_uah") is not None else None),
             reinvest_min_uah=float(raw.get("reinvest_min_uah", 0.0)),
             accounts={str(k): float(v) for k, v in (raw.get("accounts") or {}).items()},
             reinvest_min={str(k): float(v) for k, v in (raw.get("reinvest_min") or {}).items()},
@@ -208,4 +254,5 @@ def _payment_row(p: dict[str, Any]) -> PaymentRow:
         type=str(p["type"]),
         amount=float(p["amount"]),
         currency=str(p["currency"]),
+        label=str(p.get("label", "")),
     )
