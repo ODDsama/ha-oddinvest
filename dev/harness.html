@@ -390,6 +390,36 @@ function body(path) {
 }
 
 async function respond(path, opts) {
+  // Кошик — ЧИТАННЯ, яке ходить методом POST (тіло не влазить у query),
+  // тож мовчазним 204 його не відбудеш: картка чекає на JSON.
+  // Відповідь будуємо зі зведення, щоб «стане» справді відрізнялось від
+  // «зараз», інакше картка показувала б «без змін» на всьому.
+  if (path === "whatif") {
+    const s = await summary();
+    const items = JSON.parse(opts.body || "{}").items || [];
+    const qty = items.reduce((a, x) => a + (x.qty || 0), 0);
+    const spend = qty * 1011.30;
+    const after = JSON.parse(JSON.stringify(s));
+    after.capital_uah = (s.capital_uah || 0) + qty * 1000;
+    after.usd_share_pct = Math.max(0, (s.usd_share_pct || 0) - qty * 0.9);
+    after.rate_risk = { ...(s.rate_risk || {}), duration_years: 1.42 };
+    return new Response(JSON.stringify({
+      after,
+      basket: {
+        lines: items.map((x) => ({
+          kind: x.kind, label: x.isin || x.fund, qty: x.qty,
+          unit: { amount: "1011.30", currency: "UAH" },
+          total: { amount: (x.qty * 1011.30).toFixed(2), currency: "UAH" },
+          currency: "UAH", broker: "mono", broker_assumed: true,
+        })),
+        totals: [{ amount: spend.toFixed(2), currency: "UAH" }],
+        // Нестача навмисно: стенд має показувати й той випадок, який
+        // застосунок не блокує, а лише називає.
+        shorts: spend > 3000 ? [{ broker: "mono", currency: "UAH",
+          short: { amount: (spend - 3000).toFixed(2), currency: "UAH" } }] : [],
+      },
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  }
   if ((opts.method || "GET") !== "GET") {
     return new Response(null, { status: 204 });   // запис — приймаємо мовчки
   }
