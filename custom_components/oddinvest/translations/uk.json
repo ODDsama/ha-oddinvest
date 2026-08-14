@@ -127,6 +127,14 @@
       },
       "eur_target_share_pct": {
         "name": "Цільова частка EUR"
+      },
+      "goal_amount_uah": {
+        "name": "Ціль, сума"
+      }
+    },
+    "date": {
+      "goal_date": {
+        "name": "Ціль, дедлайн"
       }
     }
   },

@@ -27,7 +27,7 @@ from .models import ContractError, StateDoc
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = ["sensor", "binary_sensor", "calendar", "button", "number"]
+PLATFORMS = ["sensor", "binary_sensor", "calendar", "button", "number", "date"]
 
 type OddInvestConfigEntry = ConfigEntry[OddInvestData]
 

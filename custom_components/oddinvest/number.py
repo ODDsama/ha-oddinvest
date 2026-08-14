@@ -35,8 +35,13 @@ class OddInvestNumberDescription(NumberEntityDescription):
 # `monthly_target_uah` звідси прибрано: бекенд перестав приймати цей ключ
 # (місячний план тепер виводиться з цілі й дедлайну, а не вводиться), тож
 # кожен рух повзунка давав 400. Сутність жила далі й показувала порожнє —
-# зламана з обох боків. Значення лишається видимим, але сенсором:
-# «Місячний план» у sensor.py.
+# зламана з обох боків. Саме значення нікуди не зникло: воно приходить
+# атрибутом target_uah на сенсорі month_invested_uah. Окремої сутності
+# під нього немає й не треба — це ПОХІДНЕ число, а сутність, яку не можна
+# ні задати, ні використати тригером, лише повторює те, що вже видно.
+#
+# (Цей коментар довго обіцяв «сенсор „Місячний план“ у sensor.py». Такого
+# сенсора не було ніколи — обіцянку виправлено, а не виконано.)
 NUMBERS: tuple[OddInvestNumberDescription, ...] = (
     OddInvestNumberDescription(
         key="usd_target_share_pct",
@@ -59,6 +64,22 @@ NUMBERS: tuple[OddInvestNumberDescription, ...] = (
         native_max_value=100,
         native_step=5,
         value_fn=lambda s: s.eur_target_share_pct,
+    ),
+    OddInvestNumberDescription(
+        key="goal_amount_uah",
+        translation_key="goal_amount_uah",
+        setting_key="goal_amount_uah",
+        native_unit_of_measurement="UAH",
+        # BOX, не SLIDER: ціль — це сума, яку вводять, а не підкручують.
+        # Повзунок від нуля до мільйонів не має корисного кроку.
+        mode=NumberMode.BOX,
+        native_min_value=0,
+        native_max_value=1_000_000_000,
+        native_step=1000,
+        value_fn=lambda s: s.goal_amount_uah,
+        # Ціль у гривнях — ціле число: копійки в семизначній сумі шум, а
+        # "%g" на мільйоні дав би "1e+06", чого бекенд не розбере.
+        to_payload=lambda v: f"{int(round(v))}",
     ),
 )
 

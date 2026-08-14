@@ -127,6 +127,14 @@
       },
       "eur_target_share_pct": {
         "name": "Target EUR share"
+      },
+      "goal_amount_uah": {
+        "name": "Goal amount"
+      }
+    },
+    "date": {
+      "goal_date": {
+        "name": "Goal deadline"
       }
     }
   },
