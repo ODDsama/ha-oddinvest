@@ -143,6 +143,24 @@ class ConcentrationRow:
 
 
 @dataclass(frozen=True)
+class MarketYieldRow:
+    """Що ПЕРВИННИЙ ринок платить за строк — останнє розміщення Мінфіну.
+
+    vs_portfolio_pp — на скільки п.п. рівень вищий за дохідність портфеля
+    в ЦІЙ САМІЙ валюті. Порівняння саме з номінальною дохідністю: рівень
+    розміщення йде до податку й до знецінення. Різницю рахує сервіс, щоб
+    кожен споживач не обирав базу самотужки.
+    """
+
+    currency: str = ""
+    bucket: str = ""
+    pct: float = 0.0
+    date: str = ""
+    isin: str = ""
+    vs_portfolio_pp: float = 0.0
+
+
+@dataclass(frozen=True)
 class Settings:
     # monthly_target_uah — місячний план. ПОХІДНЕ значення: виводиться з
     # цілі й дедлайну, задати його не можна. Довго воно й не приходило
@@ -223,6 +241,9 @@ class StateDoc:
     liquidity: Liquidity | None = None
     reserve: Reserve | None = None
     concentration: tuple[ConcentrationRow, ...] = field(default_factory=tuple)
+    # market_yield — крива первинного ринку. Сутностей із неї немає (це
+    # таблиця), але сповіщення читає з неї найсвіжіший рядок.
+    market_yield: tuple[MarketYieldRow, ...] = field(default_factory=tuple)
 
     REQUIRED = (
         "schema",
@@ -282,6 +303,22 @@ class StateDoc:
         інакше лишається непоміченим до наступного погляду на екран.
         """
         return tuple(c for c in self.concentration if c.over_uah > 0)
+
+    def best_market_offer(self) -> MarketYieldRow | None:
+        """Найсвіжіше розміщення, що ВИЩЕ за дохідність портфеля.
+
+        Саме найсвіжіше, а не найвигідніше: сповіщення про подію («Мінфін
+        сьогодні розмістив…») мусить казати про те, що щойно сталось.
+        Вибір «найбільшого розриву» дав би рядок піврічної давнини й
+        повторював би його щодня.
+
+        Рядки з vs_portfolio_pp <= 0 сюди не потрапляють: «ринок дає менше
+        за твій портфель» — не привід нікого будити.
+        """
+        better = [r for r in self.market_yield if r.vs_portfolio_pp > 0 and r.date]
+        if not better:
+            return None
+        return max(better, key=lambda r: (r.date, r.vs_portfolio_pp))
 
     def redemptions_within(self, days: int, now: date) -> tuple[PaymentRow, ...]:
         """Погашення (паперів і вкладів) у найближчі `days` днів.
@@ -380,6 +417,7 @@ class StateDoc:
             liquidity=_dc(Liquidity, raw.get("liquidity")),
             reserve=_dc(Reserve, raw.get("reserve")),
             concentration=tuple(_dc(ConcentrationRow, r) for r in (raw.get("concentration") or ())),
+            market_yield=tuple(_dc(MarketYieldRow, r) for r in (raw.get("market_yield") or ())),
         )
 
 

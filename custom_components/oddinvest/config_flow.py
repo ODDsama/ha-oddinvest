@@ -90,6 +90,12 @@ class OddInvestOptionsFlow(OptionsFlow):
                 vol.Optional("notify_reinvest", default=o.get("notify_reinvest", True)): bool,
                 vol.Optional("notify_tomorrow", default=o.get("notify_tomorrow", True)): bool,
                 vol.Optional("notify_goal", default=o.get("notify_goal", True)): bool,
+                vol.Optional("notify_maturity", default=o.get("notify_maturity", True)): bool,
+                vol.Optional("notify_stale", default=o.get("notify_stale", True)): bool,
+                vol.Optional(
+                    "notify_concentration", default=o.get("notify_concentration", True)
+                ): bool,
+                vol.Optional("notify_auction", default=o.get("notify_auction", True)): bool,
                 vol.Optional(
                     "goal_threshold", default=o.get("goal_threshold", 80)
                 ): selector.NumberSelector(

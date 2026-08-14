@@ -11,17 +11,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from . import OddInvestConfigEntry
+from .const import STALE_AFTER_H
 from .entity import OddInvestEntity
-
-# STALE_AFTER_H — за скільки годин стан вважається несвіжим.
-#
-# Арифметика така. Добова джоба сервіса ходить у НБУ о 06:10 за Києвом,
-# тобто між двома успішними оновленнями рівно 24 години, і найтугіша
-# чесна межа — приблизно 30 (24 плюс запас на довгий бекфіл і на те, що
-# документ публікується не миттєво). 36 лишає зверху ще один пропущений
-# запуск: одна невдала спроба — не привід будити людину, дві поспіль —
-# уже привід.
-STALE_AFTER_H = 36
 
 
 async def async_setup_entry(

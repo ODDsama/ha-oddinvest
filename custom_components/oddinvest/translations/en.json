@@ -29,6 +29,10 @@
           "notify_reinvest": "Reinvest ready",
           "notify_tomorrow": "Payment tomorrow",
           "notify_goal": "Behind monthly goal",
+          "notify_maturity": "Redemption approaching",
+          "notify_stale": "Data is stale",
+          "notify_concentration": "Concentration limit exceeded",
+          "notify_auction": "Auction beats portfolio yield",
           "goal_threshold": "Goal threshold, % (below → warn)"
         }
       }

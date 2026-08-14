@@ -29,6 +29,10 @@
           "notify_reinvest": "Можна реінвестувати",
           "notify_tomorrow": "Завтра виплата",
           "notify_goal": "Відставання від місячної цілі",
+          "notify_maturity": "Скоро погашення",
+          "notify_stale": "Дані застаріли",
+          "notify_concentration": "Перевищено ліміт концентрації",
+          "notify_auction": "Аукціон дає більше за портфель",
           "goal_threshold": "Поріг цілі, % (нижче — попередити)"
         }
       }

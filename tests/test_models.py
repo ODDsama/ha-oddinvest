@@ -263,6 +263,71 @@ def test_redemptions_within_ignores_coupons():
     assert doc.redemptions_within(400, date(2026, 7, 15))[0].type == "redemption"
 
 
+def test_best_market_offer_takes_newest_not_biggest():
+    """Сповіщення про подію бере НАЙСВІЖІШЕ розміщення, а не найвигідніше.
+
+    Інакше воно щодня переказувало б той самий піврічної давнини рядок із
+    найбільшим розривом — і перестало б означати «щойно сталось».
+    """
+    raw = json.loads(load("basic.json"))
+    raw["market_yield"] = [
+        # Найбільший розрив, але давно.
+        {
+            "currency": "UAH",
+            "bucket": "3y",
+            "pct": 20.0,
+            "date": "2026-01-10",
+            "isin": "UA1",
+            "vs_portfolio_pp": 5.0,
+        },
+        # Найсвіжіше.
+        {
+            "currency": "UAH",
+            "bucket": "2y",
+            "pct": 16.1,
+            "date": "2026-07-14",
+            "isin": "UA2",
+            "vs_portfolio_pp": 1.2,
+        },
+    ]
+    doc = StateDoc.from_payload(json.dumps(raw))
+    best = doc.best_market_offer()
+    assert best.date == "2026-07-14"
+    assert best.bucket == "2y"
+
+
+def test_best_market_offer_ignores_worse_than_portfolio():
+    """«Ринок дає менше за твій портфель» — не привід нікого будити."""
+    raw = json.loads(load("basic.json"))
+    raw["market_yield"] = [
+        {
+            "currency": "USD",
+            "bucket": "2y",
+            "pct": 3.15,
+            "date": "2026-07-14",
+            "isin": "UA3",
+            "vs_portfolio_pp": -0.4,
+        },
+    ]
+    assert StateDoc.from_payload(json.dumps(raw)).best_market_offer() is None
+
+
+def test_market_yield_absent_on_old_service():
+    raw = json.loads(load("basic.json"))
+    raw.pop("market_yield", None)
+    doc = StateDoc.from_payload(json.dumps(raw))
+    assert doc.market_yield == ()
+    assert doc.best_market_offer() is None
+
+
+def test_market_yield_parsed_from_fixture():
+    """У фікстурі є і вищий за портфель рядок, і нижчий."""
+    doc = StateDoc.from_payload(load("basic.json"))
+    assert len(doc.market_yield) == 2
+    assert doc.best_market_offer().currency == "UAH"
+    assert doc.best_market_offer().vs_portfolio_pp == 0.72
+
+
 def test_settings_parsed():
     doc = StateDoc.from_payload(load("basic.json"))
     assert doc.settings is not None
