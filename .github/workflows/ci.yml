@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with: { python-version: "3.12" }
       # Рішення №5 концепції: фікстури живуть у репозиторії сервіса,
       # CI інтеграції завжди тестується проти його main-гілки.
@@ -35,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with: { python-version: "3.12" }
       # ruff уже налаштований у pyproject.toml — його просто ніхто не кликав.
       - run: pip install ruff==0.8.6
