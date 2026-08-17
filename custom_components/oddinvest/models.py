@@ -110,6 +110,11 @@ class Liquidity:
     reserve_uah: float = 0.0
     locked_uah: float = 0.0
     unlock_date: str = ""
+    # locked_npf_uah — скільки із замкненого сидить у НПФ. Підполе, а не
+    # додаток: unlock_date бере НАЙБЛИЖЧУ дату, тобто вклад, тож без цього
+    # числа «замкнено X, розблокується <дата>» читалось би як правда про
+    # гроші, недоступні ще двадцять п'ять років.
+    locked_npf_uah: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -200,6 +205,21 @@ class StateDoc:
     # інструмент: дохідності в нього немає, і в купівельну спроможність він
     # не входить. Необов'язкове з тієї ж причини, що й попередні два.
     reserve_uah: float = 0.0
+    # npf_uah — пенсійні активи (НПФ) у грн-екв. Частина капіталу, але не
+    # купівельна спроможність: до 50 років звідси не приходить нічого.
+    # Необовʼязкове з тієї ж причини, що й три попередні.
+    npf_uah: float = 0.0
+    # npf_cost_uah — сума внесків. Тримається поруч, бо без неї приріст
+    # пенсійної частини не порахувати: вартість і собівартість тут
+    # РІЗНІ, на відміну від вкладу чи резерву.
+    npf_cost_uah: float = 0.0
+    # npf_contrib_due — чи прострочений внесок цього місяця.
+    #
+    # Єдина дія, якої НПФ вимагає від власника, — вчасно внести, і саме тому
+    # це поле, а не пропозиції реінвесту, є його місцем в інтеграції.
+    # Самогасне на боці сервіса: щойно внесок за поточний місяць зʼявиться в
+    # журналі, поле стає false, тож стану «я вже бачив» тут тримати не треба.
+    npf_contrib_due: bool = False
     # capital_uah — УВЕСЬ капітал одним числом від сервіса.
     #
     # None, а НЕ 0.0, і це не педантизм: порожній портфель законно має
@@ -285,6 +305,7 @@ class StateDoc:
             + self.funds_uah
             + self.deposits_uah
             + self.reserve_uah
+            + self.npf_uah
         )
 
     def age_hours(self, now: datetime) -> float | None:
@@ -389,6 +410,9 @@ class StateDoc:
             funds_uah=float(raw.get("funds_uah", 0.0)),
             deposits_uah=float(raw.get("deposits_uah", 0.0)),
             reserve_uah=float(raw.get("reserve_uah", 0.0)),
+            npf_uah=float(raw.get("npf_uah", 0.0)),
+            npf_cost_uah=float(raw.get("npf_cost_uah", 0.0)),
+            npf_contrib_due=bool(raw.get("npf_contrib_due", False)),
             capital_uah=(float(raw["capital_uah"]) if raw.get("capital_uah") is not None else None),
             reinvest_min_uah=float(raw.get("reinvest_min_uah", 0.0)),
             accounts={str(k): float(v) for k, v in (raw.get("accounts") or {}).items()},

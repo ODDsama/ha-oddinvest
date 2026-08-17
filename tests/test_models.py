@@ -76,9 +76,14 @@ def test_parse_basic_fixture():
 def test_capital_uah_parsed():
     """Капітал приходить готовим числом і береться саме воно."""
     doc = StateDoc.from_payload(load("basic.json"))
-    # 138 246.80 номіналу + 60 000 резерву
-    assert doc.capital_uah == 198246.8
-    assert doc.capital() == 198246.8
+    # 138 246.80 номіналу + 60 000 резерву + 45 000 НПФ.
+    #
+    # Число переїхало з 198 246.80 тоді, коли НПФ увійшов у капітал на боці
+    # сервіса. Це не регресія фікстури, а те, заради чого він туди
+    # заводився: доти будь-яка частка, порахована при наявному пенсійному
+    # рахунку, була заниженою.
+    assert doc.capital_uah == 243246.8
+    assert doc.capital() == 243246.8
 
 
 def test_capital_falls_back_to_sum():
@@ -106,7 +111,7 @@ def test_capital_zero_is_not_absent():
     """
     raw = json.loads(load("basic.json"))
     raw["capital_uah"] = 0
-    # Частини лишаємо ненульовими: сума дала б 198 246.80, і якби запасний
+    # Частини лишаємо ненульовими: сума дала б 243 246.80, і якби запасний
     # шлях увімкнувся помилково, це було б видно.
     doc = StateDoc.from_payload(json.dumps(raw))
     assert doc.capital_uah == 0
@@ -415,3 +420,63 @@ def test_null_next_payment():
     raw["next_payment"] = None
     doc = StateDoc.from_payload(json.dumps(raw))
     assert doc.next_payment is None
+
+
+def test_npf_parsed():
+    """Пенсійні поля доїжджають з документа цілими.
+
+    Усі три разом, бо кожне має свого споживача: npf_uah іде в атрибути
+    капіталу й у резервну суму capital(), npf_cost_uah — у пару приросту
+    (у НПФ вартість і собівартість РІЗНІ, на відміну від вкладу), а
+    npf_contrib_due — у власний binary_sensor.
+    """
+    doc = StateDoc.from_payload(load("basic.json"))
+    assert doc.npf_uah == 45_000
+    assert doc.npf_cost_uah == 40_000
+    assert doc.npf_contrib_due is True
+    # Замкнене в НПФ — ПІДПОЛЕ locked_uah, а не додаток до нього: сума
+    # понад locked_uah описувала б неможливий портфель.
+    assert doc.liquidity is not None
+    assert doc.liquidity.locked_npf_uah == 45_000
+    assert doc.liquidity.locked_npf_uah <= doc.liquidity.locked_uah
+
+
+def test_npf_absent_on_old_service():
+    """Сервіс без НПФ не валить парсер — поля просто нулі.
+
+    Той самий контракт, що з фондами, вкладами й резервом: усе, що
+    зʼявилось у схемі пізніше, читається за замовчуванням. Для
+    npf_contrib_due це саме False, тобто нагадування мовчить, а не
+    спрацьовує на порожньому місці.
+    """
+    raw = json.loads(load("basic.json"))
+    for k in ("npf_uah", "npf_cost_uah", "npf_contrib_due"):
+        raw.pop(k, None)
+    raw["liquidity"].pop("locked_npf_uah", None)
+    doc = StateDoc.from_payload(json.dumps(raw))
+    assert doc.npf_uah == 0.0
+    assert doc.npf_cost_uah == 0.0
+    assert doc.npf_contrib_due is False
+    assert doc.liquidity.locked_npf_uah == 0.0
+
+
+def test_capital_fallback_includes_npf():
+    """Резервна сума не має губити пенсійну частину.
+
+    Окремо від test_capital_falls_back_to_sum, хоч той і звіряється з
+    числом сервіса: цей ловить ІНШУ помилку — коли npf_uah забули додати в
+    capital(), але фікстуру ще не оновили, тож обидва числа збігаються й
+    перший тест лишається зеленим, будучи хибним.
+
+    Тут різниця вимірюється прямо: сума без НПФ мусить бути МЕНШОЮ рівно на
+    пенсійний баланс.
+    """
+    raw = json.loads(load("basic.json"))
+    expected = raw.pop("capital_uah")
+    with_npf = StateDoc.from_payload(json.dumps(raw))
+    assert with_npf.capital() == expected
+
+    raw_no_npf = dict(raw)
+    raw_no_npf["npf_uah"] = 0
+    without = StateDoc.from_payload(json.dumps(raw_no_npf))
+    assert expected - without.capital() == with_npf.npf_uah

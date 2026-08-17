@@ -33,6 +33,7 @@
           "notify_stale": "Дані застаріли",
           "notify_concentration": "Перевищено ліміт концентрації",
           "notify_auction": "Аукціон дає більше за портфель",
+          "notify_npf_contribution": "Внеску в НПФ за цей місяць немає",
           "goal_threshold": "Поріг цілі, % (нижче — попередити)"
         }
       }
@@ -113,6 +114,9 @@
       },
       "concentration_breach": {
         "name": "Ліміт концентрації перевищено"
+      },
+      "npf_contribution_due": {
+        "name": "Внесок у НПФ"
       }
     },
     "calendar": {

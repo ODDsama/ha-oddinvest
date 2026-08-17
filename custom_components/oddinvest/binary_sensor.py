@@ -26,6 +26,7 @@ async def async_setup_entry(
             ReinvestReadySensor(entry.runtime_data, entry.entry_id),
             DataStaleSensor(entry.runtime_data, entry.entry_id),
             ConcentrationBreachSensor(entry.runtime_data, entry.entry_id),
+            NPFContributionDueSensor(entry.runtime_data, entry.entry_id),
         ]
     )
 
@@ -80,6 +81,47 @@ class UninvestedCashSensor(OddInvestEntity, BinarySensorEntity):
         if self._data.state is None:
             return None
         return {"uninvested_uah": self._data.state.uninvested_uah}
+
+
+class NPFContributionDueSensor(OddInvestEntity, BinarySensorEntity):
+    """ON = внеску в пенсійний за цей місяць ще немає.
+
+    Єдина дія, якої НПФ вимагає від власника, — вчасно внести. Купити його
+    «вигідніше» не можна, продати не можна, перевкласти не можна: гроші
+    замкнені до пенсійного віку. Тому в застосунку він не стоїть у
+    пропозиціях реінвесту (там питання «куди подіти прибулий купон», і
+    двадцятип'ятирічний замок на нього не відповідає) — його місце саме тут.
+
+    Самогасне, і стану «я вже бачив» тут немає навмисно. Сервіс питає до
+    журналу внесків: щойно зʼявиться внесок за поточний календарний місяць,
+    npf_contrib_due стає false. Прапорець «нагадав» довелось би десь
+    тримати й якось скидати першого числа — а журнал і є відповіддю.
+
+    PROBLEM, а не звичайний бінарний: пропущений внесок — це не стан
+    портфеля, а невиконана дія, і в HA це саме проблема.
+    """
+
+    _attr_translation_key = "npf_contribution_due"
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+
+    def __init__(self, data, entry_id: str) -> None:
+        super().__init__(data, entry_id)
+        self._attr_unique_id = f"{entry_id}_npf_contribution_due"
+
+    @property
+    def is_on(self) -> bool | None:
+        if self._data.state is None:
+            return None
+        return self._data.state.npf_contrib_due
+
+    @property
+    def extra_state_attributes(self):
+        st = self._data.state
+        if st is None:
+            return None
+        # Собівартість поруч із вартістю: у НПФ вони РІЗНІ, на відміну від
+        # вкладу чи резерву, тож без пари приросту не побачити.
+        return {"npf_uah": st.npf_uah, "npf_cost_uah": st.npf_cost_uah}
 
 
 class DataStaleSensor(OddInvestEntity, BinarySensorEntity):

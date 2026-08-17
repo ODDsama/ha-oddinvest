@@ -106,11 +106,16 @@ def _liquidity_attrs(doc: StateDoc) -> dict[str, Any] | None:
     lq = doc.liquidity
     if lq is None:
         return None
+    # locked_npf_uah — ПІДПОЛЕ locked_uah, і без нього пара
+    # «замкнено / розблокується» вводить в оману: unlock_date бере
+    # найближчу дату, тобто вклад, а більша частина замкненого може бути
+    # пенсійною й недоступною ще двадцять пʼять років.
     return {
         "now_uah": lq.now_uah,
         "in_90_uah": lq.in_90_uah,
         "reserve_uah": lq.reserve_uah,
         "locked_uah": lq.locked_uah,
+        "locked_npf_uah": lq.locked_npf_uah,
         "unlock_date": lq.unlock_date,
     }
 
@@ -191,8 +196,10 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=0,
         # Капітал — усе, що в тебе є: папери, гроші, сертифікати фондів,
-        # тіло банківських вкладів і резерв. Резерв входить попри те, що
-        # не працює: це твої гроші, і вони або в капіталі, або ніде.
+        # тіло банківських вкладів, резерв і пенсійні активи. Резерв входить
+        # попри те, що не працює: це твої гроші, і вони або в капіталі, або
+        # ніде. НПФ — попри те, що забрати його не можна до 50 років: капітал
+        # відповідає на «скільки в мене є», а не на «скільки я можу зняти».
         #
         # Сума ЖИВЕ НЕ ТУТ. Сервіс публікує capital_uah готовим числом, і
         # StateDoc.capital() бере саме його, лишаючи складання запасним
@@ -200,7 +207,14 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         # самостійно — тобто був пʼятим визначенням капіталу в застосунку,
         # де поле capital_uah зʼявилось якраз щоб визначення було одне.
         value_fn=lambda d: d.capital(),
-        attrs_fn=lambda d: {"reserve_uah": d.reserve_uah} if d.reserve_uah else None,
+        # Складники, які варто бачити поруч із сумою, але які не варті
+        # власної сутності — за критерієм у шапці цього переліку: ні часовий
+        # ряд, ні тригер, ні числовий бейдж. Сутності немає ні в funds_uah,
+        # ні в deposits_uah, і НПФ тут не виняток.
+        attrs_fn=lambda d: {
+            k: v for k, v in (("reserve_uah", d.reserve_uah), ("npf_uah", d.npf_uah)) if v
+        }
+        or None,
     ),
     OddInvestSensorDescription(
         key="month_invested_uah",

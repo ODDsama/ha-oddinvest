@@ -33,6 +33,7 @@
           "notify_stale": "Data is stale",
           "notify_concentration": "Concentration limit exceeded",
           "notify_auction": "Auction beats portfolio yield",
+          "notify_npf_contribution": "Pension contribution missing this month",
           "goal_threshold": "Goal threshold, % (below → warn)"
         }
       }
@@ -113,6 +114,9 @@
       },
       "concentration_breach": {
         "name": "Concentration limit exceeded"
+      },
+      "npf_contribution_due": {
+        "name": "Pension contribution"
       }
     },
     "calendar": {

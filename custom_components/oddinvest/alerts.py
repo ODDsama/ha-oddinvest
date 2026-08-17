@@ -195,6 +195,20 @@ class NotificationManager:
                 self._last_auction = offer.date
                 await self._persist()
 
+        # Внесок у пенсійний — єдина дія, якої НПФ вимагає.
+        #
+        # Ключ із МІСЯЦЕМ, а не з днем: нагадувати щодня про те, що людина
+        # й так планувала зробити цього місяця, — найшвидший спосіб привчити
+        # ігнорувати сповіщення. Той самий висновок, що в notify_concentration.
+        #
+        # Само повідомлення зникає без нашої участі: сервіс гасить
+        # npf_contrib_due, щойно внесок зʼявиться в журналі.
+        if self._opt("notify_npf_contribution") and st.npf_contrib_due:
+            await self._send(
+                f"npf:{today.strftime('%Y-%m')}",
+                "🏦 Внеску в пенсійний за цей місяць ще немає.",
+            )
+
         if self._opt("notify_goal"):
             last = _cal.monthrange(today.year, today.month)[1]
             threshold = int(self._entry.options.get("goal_threshold", 80))
