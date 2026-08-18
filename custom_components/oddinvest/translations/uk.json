@@ -117,6 +117,9 @@
       },
       "npf_contribution_due": {
         "name": "Внесок у НПФ"
+      },
+      "reserve_ready": {
+        "name": "Подушка зібрана"
       }
     },
     "calendar": {

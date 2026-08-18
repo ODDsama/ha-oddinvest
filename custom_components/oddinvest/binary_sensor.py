@@ -27,6 +27,7 @@ async def async_setup_entry(
             DataStaleSensor(entry.runtime_data, entry.entry_id),
             ConcentrationBreachSensor(entry.runtime_data, entry.entry_id),
             NPFContributionDueSensor(entry.runtime_data, entry.entry_id),
+            ReserveReadySensor(entry.runtime_data, entry.entry_id),
         ]
     )
 
@@ -174,6 +175,54 @@ class DataStaleSensor(OddInvestEntity, BinarySensorEntity):
             "nbu_age_hours": round(nbu_age, 1) if nbu_age is not None else None,
             "threshold_hours": STALE_AFTER_H,
             "stale": stale,
+        }
+
+
+class ReserveReadySensor(OddInvestEntity, BinarySensorEntity):
+    """ON = подушку зібрано до заданої цілі.
+
+    БЕЗ device_class: problem, і це навмисно. Решта бінарних сенсорів тут
+    кажуть «щось треба зробити»; цей каже протилежне — «те, що збирали,
+    зібрано». Одягнений у problem, він світив би червоним саме тоді, коли
+    все добре, і мовчав, коли подушки немає, тобто рівно навпаки. Той
+    самий випадок, що ReinvestReadySensor вище: можливість, а не хиба.
+
+    unknown, коли цілі резерву немає — див. Reserve.is_ready.
+
+    ПОХІДНЕ, а не поле документа. Сервіс уже надсилає gap_uah і target_uah,
+    і завести поруч reserve_ready означало б другу відповідь на те саме
+    питання. Прецедент — ConcentrationBreachSensor нижче: він теж
+    виводиться з наявних чисел, а не читає готовий прапорець.
+    """
+
+    _attr_translation_key = "reserve_ready"
+
+    def __init__(self, data, entry_id: str) -> None:
+        super().__init__(data, entry_id)
+        self._attr_unique_id = f"{entry_id}_reserve_ready"
+
+    @property
+    def is_on(self) -> bool | None:
+        st = self._data.state
+        if st is None or st.reserve is None:
+            return None
+        return st.reserve.is_ready()
+
+    @property
+    def extra_state_attributes(self):
+        st = self._data.state
+        if st is None or st.reserve is None:
+            return None
+        r = st.reserve
+        # Ціль і розрив поруч зі станом: «зібрано» без «скільки саме» —
+        # число, яке нема чим перевірити. Місяці теж: подушку задають
+        # саме в них, і частка капіталу без них бреше.
+        return {
+            "reserve_uah": r.uah,
+            "target_uah": r.target_uah,
+            "gap_uah": r.gap_uah,
+            "months": r.months,
+            "target_months": r.target_months,
         }
 
 

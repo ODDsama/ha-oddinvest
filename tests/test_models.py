@@ -251,6 +251,43 @@ def test_breaches_only_over_limit():
     assert any(c.over_uah == 0 for c in doc.concentration)
 
 
+def test_reserve_not_ready_while_gap_open():
+    """Фікстура: 60 000 ₴ при цілі 90 000 ₴ — розрив 30 000, тобто НЕ зібрано."""
+    doc = StateDoc.from_payload(load("basic.json"))
+    assert doc.reserve is not None
+    assert doc.reserve.gap_uah == 30000
+    assert doc.reserve.is_ready() is False
+
+
+def test_reserve_ready_when_gap_closed():
+    """Зібраний резерв приїжджає БЕЗ gap_uah, а не з нулем: у сервіса omitempty."""
+    raw = json.loads(load("basic.json"))
+    raw["reserve"].pop("gap_uah", None)
+    doc = StateDoc.from_payload(json.dumps(raw))
+    assert doc.reserve.is_ready() is True
+
+
+def test_reserve_ready_unknown_without_target():
+    """Цілі немає — питання не ставили. None, а не False.
+
+    False сказало б «не зібрано» тому, хто резерв не планує, і в HA це
+    світило б сталим off замість чесного unknown.
+    """
+    raw = json.loads(load("basic.json"))
+    raw["reserve"].pop("target_uah", None)
+    raw["reserve"].pop("gap_uah", None)
+    doc = StateDoc.from_payload(json.dumps(raw))
+    assert doc.reserve.is_ready() is None
+
+
+def test_reserve_absent_on_old_service():
+    """Сервіс без обʼєкта reserve — сенсор мовчить (unknown), а не каже «не зібрано»."""
+    raw = json.loads(load("basic.json"))
+    raw.pop("reserve", None)
+    doc = StateDoc.from_payload(json.dumps(raw))
+    assert doc.reserve is None
+
+
 def test_redemptions_within_ignores_coupons():
     """Погашення ≠ купон.
 

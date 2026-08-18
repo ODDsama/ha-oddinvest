@@ -117,6 +117,9 @@
       },
       "npf_contribution_due": {
         "name": "Pension contribution"
+      },
+      "reserve_ready": {
+        "name": "Emergency fund ready"
       }
     },
     "calendar": {
