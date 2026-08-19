@@ -100,6 +100,9 @@
       },
       "reserve_months": {
         "name": "Reserve, months"
+      },
+      "tasks": {
+        "name": "Tasks"
       }
     },
     "binary_sensor": {

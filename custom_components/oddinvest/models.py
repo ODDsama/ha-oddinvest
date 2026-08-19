@@ -170,6 +170,35 @@ class ConcentrationRow:
 
 
 @dataclass(frozen=True)
+class Task:
+    """Один рядок черги «що робити»: рівно одне рішення, яке чекає.
+
+    Черга приходить ГОТОВОЮ й уже впорядкованою — сервіс складає і порядок,
+    і саму прозу (internal/api/state_tasks.go). Інтеграція її не перебирає й
+    не переформульовує: те саме питання, зібране двічі, дало б два різні
+    списки — у застосунку й тут, — а це рівно та розбіжність, проти якої в
+    сервісі існує state/capital.go.
+
+    sev — це ЧАС, а не важливість: "now" (можна зробити сьогодні), "soon"
+    (дата в межах місяця), "watch" (стан без дедлайну).
+
+    action — сталий ТОКЕН дії, а не підпис кнопки: натискати тут нічого, і
+    саме тому підпису немає. Він потрібен автоматизації, яка хоче реагувати
+    на конкретний вид задачі, не розбираючи текст.
+    """
+
+    id: str = ""
+    sev: str = ""
+    rank: int = 0
+    kind: str = ""
+    title: str = ""
+    why: str = ""
+    when: str = ""
+    action: str = ""
+    amount_uah: float = 0.0
+
+
+@dataclass(frozen=True)
 class MarketYieldRow:
     """Що ПЕРВИННИЙ ринок платить за строк — останнє розміщення Мінфіну.
 
@@ -286,6 +315,12 @@ class StateDoc:
     # market_yield — крива первинного ринку. Сутностей із неї немає (це
     # таблиця), але сповіщення читає з неї найсвіжіший рядок.
     market_yield: tuple[MarketYieldRow, ...] = field(default_factory=tuple)
+    # tasks — черга «що робити», вже впорядкована сервісом.
+    #
+    # Порожня в двох випадках, і обидва законні: робити справді нічого або
+    # бекенд старший за це поле. Розрізняти їх інтеграції нічим, та й
+    # незачем: в обох випадках правильна відповідь одна — нуль задач.
+    tasks: tuple[Task, ...] = field(default_factory=tuple)
 
     REQUIRED = (
         "schema",
@@ -464,6 +499,7 @@ class StateDoc:
             reserve=_dc(Reserve, raw.get("reserve")),
             concentration=tuple(_dc(ConcentrationRow, r) for r in (raw.get("concentration") or ())),
             market_yield=tuple(_dc(MarketYieldRow, r) for r in (raw.get("market_yield") or ())),
+            tasks=tuple(_dc(Task, r) for r in (raw.get("tasks") or ())),
         )
 
 

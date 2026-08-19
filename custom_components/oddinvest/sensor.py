@@ -134,6 +134,43 @@ def _reserve_attrs(doc: StateDoc) -> dict[str, Any] | None:
     }
 
 
+def _tasks_attrs(doc: StateDoc) -> dict[str, Any]:
+    """Черга задач атрибутом, у порядку, який дав сервіс.
+
+    ОДИН сенсор із кількістю, а не сутність на задачу, і це не економія.
+    Задачі приходять і зникають самі — внесок записали, виплату відмітили, —
+    а сутність, яка зникає, ламає і графіки, і автоматизації, що на неї
+    посилаються. Кількість же лишається числом завжди, навіть коли вона нуль.
+
+    Найтерміновіше винесене окремими полями: автоматизації «скажи вголос, що
+    робити» потрібен один рядок, а не список, і діставати його шаблоном із
+    масиву щоразу було б переписуванням тієї самої умови в кожній автоматизації.
+    """
+    first = doc.tasks[0] if doc.tasks else None
+    return {
+        "now": sum(1 for t in doc.tasks if t.sev == "now"),
+        "soon": sum(1 for t in doc.tasks if t.sev == "soon"),
+        "watch": sum(1 for t in doc.tasks if t.sev == "watch"),
+        "top_title": first.title if first else "",
+        "top_why": first.why if first else "",
+        "top_action": first.action if first else "",
+        "top_kind": first.kind if first else "",
+        "tasks": [
+            {
+                "id": t.id,
+                "sev": t.sev,
+                "kind": t.kind,
+                "title": t.title,
+                "why": t.why,
+                "when": t.when,
+                "action": t.action,
+                "amount_uah": t.amount_uah,
+            }
+            for t in doc.tasks
+        ],
+    }
+
+
 SENSORS: tuple[OddInvestSensorDescription, ...] = (
     OddInvestSensorDescription(
         key="invested_uah",
@@ -342,6 +379,17 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         value_fn=lambda d: d.reserve.months if d.reserve else None,
         attrs_fn=_reserve_attrs,
     ),
+    OddInvestSensorDescription(
+        key="tasks",
+        translation_key="tasks",
+        native_unit_of_measurement="задач",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        # Число — скільки рішень чекає. Саме воно годиться і для картки, і
+        # для умови автоматизації; сам список лежить атрибутом.
+        value_fn=lambda d: len(d.tasks),
+        attrs_fn=_tasks_attrs,
+    ),
 )
 
 
@@ -364,7 +412,11 @@ class OddInvestSensor(OddInvestEntity, SensorEntity):
     # повну копію драбини погашень і переліку найближчих виплат. Самі
     # атрибути лишаються видимими в шаблонах і картках — не пишеться лише
     # їхня історія, якої ніхто не читає.
-    _unrecorded_attributes = frozenset({"ladder", "top_payments"})
+    # tasks сюди ж, і причина та сама, лише гостріша: черга перебудовується
+    # на КОЖНУ мутацію портфеля, а її рядки — це проза, тобто найдорожче з
+    # усього, що могло б потрапити в базу історії. Число задач лишається
+    # станом сенсора й пишеться нормально — саме його й будують у графік.
+    _unrecorded_attributes = frozenset({"ladder", "top_payments", "tasks"})
 
     def __init__(self, data, entry_id: str, desc: OddInvestSensorDescription) -> None:
         super().__init__(data, entry_id)

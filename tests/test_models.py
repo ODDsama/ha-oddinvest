@@ -38,6 +38,41 @@ def test_fixture_matches_schema():
     jsonschema.validate(doc, schema)
 
 
+def test_parse_tasks():
+    """Черга задач читається з фікстури й лишається в порядку сервіса.
+
+    Порядок тут перевіряється навмисно: інтеграція його НЕ відтворює, вона
+    його ДОВІРЯЄ — сервіс уже впорядкував (спершу sev, далі rank). Якби
+    парсер колись почав сортувати сам, HA й застосунок показували б різні
+    «найтерміновіші» задачі, і помітили б це не одразу.
+    """
+    doc = StateDoc.from_payload(load("basic.json"))
+    assert len(doc.tasks) == 2
+    first, second = doc.tasks
+    assert first.id == "reserve-fill"
+    assert first.sev == "now"
+    assert first.kind == "reserve"
+    assert first.action == "fill-reserve"
+    assert first.amount_uah == 12400
+    # Друга — без kind: задача про довідник НБУ не про інструмент, і
+    # порожній рядок тут означає саме це, а не «забули заповнити».
+    assert second.id == "nbu"
+    assert second.sev == "watch"
+    assert second.kind == ""
+
+
+def test_tasks_absent_is_empty():
+    """Бекенд без черги — не помилка, а старіший сервіс.
+
+    Те саме правило, що для funds_uah і решти адитивних полів: інтеграція
+    переживає відсутність нулем, а не падінням.
+    """
+    raw = json.loads(load("basic.json"))
+    del raw["tasks"]
+    doc = StateDoc.from_payload(json.dumps(raw))
+    assert doc.tasks == ()
+
+
 def test_parse_basic_fixture():
     doc = StateDoc.from_payload(load("basic.json"))
     assert doc.schema == 1
