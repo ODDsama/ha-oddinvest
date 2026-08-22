@@ -33,6 +33,34 @@ def _next_payment_date(doc: StateDoc) -> date | None:
     return date.fromisoformat(doc.next_payment.date)
 
 
+def _xirr_attrs(cur: str) -> Callable[[StateDoc], dict[str, Any] | None]:
+    """Чому число порожнє — поруч із самим числом.
+
+    Стан сенсора лишається unknown, доки вкладені гроші не попрацюють
+    min_days у середньому, і доти картка не мала чим це пояснити:
+    «зламалось» було єдиним, що з неї читалось. Тут же лежить заробок за
+    фактом — відповідь на «скільки я заробив» без жодної ануалізації,
+    тобто саме те, чого від показника й чекають.
+
+    Окремих сутностей під це не заводимо: чотири скаляри при вже наявному
+    сенсорі коштують recorder-у копійки, а три нові сутності на одне
+    пояснення провалюють критерій відбору нижче.
+    """
+
+    def attrs(doc: StateDoc) -> dict[str, Any] | None:
+        r = doc.realized.get(cur)
+        if r is None:
+            return None
+        return {
+            "gain": r.gain,
+            "gain_pct": r.gain_pct,
+            "money_days": r.money_days,
+            "min_days": r.min_days,
+        }
+
+    return attrs
+
+
 def _next_payment_attrs(doc: StateDoc) -> dict[str, Any] | None:
     if doc.next_payment is None:
         return None
@@ -293,6 +321,7 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         value_fn=lambda d: d.xirr.get("UAH"),
+        attrs_fn=_xirr_attrs("UAH"),
     ),
     OddInvestSensorDescription(
         key="xirr_usd",
@@ -301,6 +330,7 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         value_fn=lambda d: d.xirr.get("USD"),
+        attrs_fn=_xirr_attrs("USD"),
     ),
     OddInvestSensorDescription(
         key="xirr_eur",
@@ -309,6 +339,7 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         value_fn=lambda d: d.xirr.get("EUR"),
+        attrs_fn=_xirr_attrs("EUR"),
     ),
     # Нижче — те, що доти було видно лише у веб-інтерфейсі.
     #

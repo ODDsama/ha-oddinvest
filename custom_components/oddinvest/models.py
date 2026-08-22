@@ -217,6 +217,23 @@ class MarketYieldRow:
 
 
 @dataclass(frozen=True)
+class Realized:
+    """Результат за фактом по одній валюті — і причина, з якої XIRR поруч
+    може мовчати.
+
+    Не дублює xirr, а тримає його порожнечу поясненою: gain нічим не
+    ануалізований, тож правдивий з першого дня, а money_days проти
+    min_days каже, чого бракує річній ставці. Поріг приходить із сервіса,
+    а не вписаний тут: те саме число в двох репозиторіях розійшлося б.
+    """
+
+    gain: float = 0.0
+    gain_pct: float = 0.0
+    money_days: float = 0.0
+    min_days: int = 0
+
+
+@dataclass(frozen=True)
 class Settings:
     # monthly_target_uah — місячний план. ПОХІДНЕ значення: виводиться з
     # цілі й дедлайну, задати його не можна. Довго воно й не приходило
@@ -289,6 +306,10 @@ class StateDoc:
     settings: Settings | None = None
     # v1.0+: річний XIRR по валютах, %; порожній dict = нерахований
     xirr: dict[str, float] = field(default_factory=dict)
+    # Результат за фактом по валютах. На відміну від xirr, приходить і
+    # тоді, коли річна ставка ще прихована порогом, — саме він дає
+    # сутності зміст, доки її стан unknown.
+    realized: dict[str, Realized] = field(default_factory=dict)
 
     # Нижче — те, що доти жило лише у веб-інтерфейсі. Усе необовʼязкове:
     # старіший сервіс цих полів не надсилає, і сутність тоді читається як
@@ -487,6 +508,11 @@ class StateDoc:
             calendar=tuple(_payment_row(p) for p in raw.get("calendar", ())),
             settings=_settings(raw.get("settings")),
             xirr={str(k): float(v) for k, v in (raw.get("xirr") or {}).items()},
+            realized={
+                str(k): _dc(Realized, v)
+                for k, v in (raw.get("realized") or {}).items()
+                if v
+            },
             income_monthly_now=float(raw.get("income_monthly_now", 0.0)),
             accrued_uah=float(raw.get("accrued_uah", 0.0)),
             blended_yield_pct=float(raw.get("blended_yield_pct", 0.0)),

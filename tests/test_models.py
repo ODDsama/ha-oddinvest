@@ -424,6 +424,34 @@ def test_xirr_absent_on_old_service():
     assert doc.xirr == {}
 
 
+def test_realized_parsed():
+    doc = StateDoc.from_payload(load("basic.json"))
+    uah = doc.realized["UAH"]
+    assert uah.gain == 1240.55
+    assert uah.gain_pct == 3.31
+    assert uah.money_days == 74.2
+    assert uah.min_days == 30
+
+
+def test_realized_present_without_xirr():
+    """Суть поля: долар не дотягнув до порога, тож річної ставки в нього
+    немає — а результат за фактом є, і разом із ним причина мовчання."""
+    raw = json.loads(load("basic.json"))
+    del raw["xirr"]["USD"]
+    doc = StateDoc.from_payload(json.dumps(raw))
+    assert "USD" not in doc.xirr
+    usd = doc.realized["USD"]
+    assert usd.gain == -12.40
+    assert usd.money_days < usd.min_days
+
+
+def test_realized_absent_on_old_service():
+    raw = json.loads(load("basic.json"))
+    del raw["realized"]
+    doc = StateDoc.from_payload(json.dumps(raw))
+    assert doc.realized == {}
+
+
 def test_empty_portfolio_fixture():
     """Свіжа інсталяція: нуль лотів, все по нулях — нічого не падає."""
     doc = StateDoc.from_payload(load("empty.json"))
@@ -433,6 +461,7 @@ def test_empty_portfolio_fixture():
     assert doc.ladder == ()
     assert doc.settings is None
     assert doc.xirr == {}
+    assert doc.realized == {}
 
 
 def test_settings_absent_on_old_service():
