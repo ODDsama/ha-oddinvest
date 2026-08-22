@@ -509,9 +509,7 @@ class StateDoc:
             settings=_settings(raw.get("settings")),
             xirr={str(k): float(v) for k, v in (raw.get("xirr") or {}).items()},
             realized={
-                str(k): _dc(Realized, v)
-                for k, v in (raw.get("realized") or {}).items()
-                if v
+                str(k): _dc(Realized, v) for k, v in (raw.get("realized") or {}).items() if v
             },
             income_monthly_now=float(raw.get("income_monthly_now", 0.0)),
             accrued_uah=float(raw.get("accrued_uah", 0.0)),
