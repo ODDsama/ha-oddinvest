@@ -168,7 +168,7 @@
         },
         "status": {
           "name": "Статус",
-          "description": "received або reinvested."
+          "description": "received — гроші надійшли; none — зняти позначку."
         }
       }
     }

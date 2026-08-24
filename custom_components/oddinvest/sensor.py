@@ -89,6 +89,41 @@ def _ladder_attrs(doc: StateDoc) -> dict[str, Any]:
     }
 
 
+def _fx_window_attrs(currency: str):
+    """Історія курсу однією валютою — атрибутами до її частки в капіталі.
+
+    Окремих сутностей звідси немає навмисно, і причина та сама, що в
+    market_yield: це ТАБЛИЦЯ, а сутність HA — одне число з історією. Три
+    вікна × два числа кожне дали б шість сенсорів, які нікуди не
+    рухаються між оновленнями довідника.
+
+    Сповіщень звідси теж немає — перцентиль є фактом про минуле, а не
+    сигналом; аргумент цілком записаний у FXWindowRow.
+    """
+
+    def attrs(doc: StateDoc) -> dict[str, Any] | None:
+        rows = [r for r in doc.fx_window if r.currency == currency]
+        if not rows:
+            return None
+        return {
+            "rate": rows[0].now_rate,
+            "windows": [
+                {
+                    "years": r.years,
+                    "points": r.points,
+                    "percentile": r.percentile,
+                    "median_rate": r.median_rate,
+                    "min_rate": r.min_rate,
+                    "max_rate": r.max_rate,
+                    "vs_median_native": r.vs_median_native,
+                }
+                for r in rows
+            ],
+        }
+
+    return attrs
+
+
 def _independence_date(doc: StateDoc) -> date | None:
     """Дата, коли дохід покриє ціль, — за ПЛАНОВИМ внеском.
 
@@ -226,6 +261,7 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=1,
         value_fn=lambda d: d.usd_share_pct,
+        attrs_fn=_fx_window_attrs("USD"),
     ),
     OddInvestSensorDescription(
         key="eur_share_pct",
@@ -234,6 +270,7 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=1,
         value_fn=lambda d: d.eur_share_pct,
+        attrs_fn=_fx_window_attrs("EUR"),
     ),
     OddInvestSensorDescription(
         key="uninvested_uah",

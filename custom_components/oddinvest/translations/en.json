@@ -159,7 +159,7 @@
     },
     "mark_payment": {
       "name": "Mark payment",
-      "description": "Mark a payout as received or reinvested.",
+      "description": "Mark a payout as received, or clear the mark.",
       "fields": {
         "isin": {
           "name": "ISIN",
@@ -171,7 +171,7 @@
         },
         "status": {
           "name": "Status",
-          "description": "received or reinvested."
+          "description": "received — money arrived; none — clear the mark."
         }
       }
     }

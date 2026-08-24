@@ -199,6 +199,32 @@ class Task:
 
 
 @dataclass(frozen=True)
+class FXWindowRow:
+    """Де стоїть сьогоднішній курс валюти серед власної історії.
+
+    По три рядки на валюту (1, 3 і 10 років) — вони РІЗНІ, бо гривня
+    падає стрибками, і коротке вікно ловить або стрибок, або затишшя між
+    ними. points каже, скільки точок реально знайшлось: вікно «10 років»
+    на базі, якій три місяці, існувати не може.
+
+    ЦЕ ФАКТ, А НЕ СИГНАЛ — сповіщень із цих рядків немає й не буде, з тієї
+    ж причини, з якої їх немає з market_yield про кожен рух ринку:
+    найвищий за десять років курс був найвищим рівно до наступного тижня.
+    Довгий аргумент лежить у сервісі (internal/domain/fxwindow.go).
+    """
+
+    currency: str = ""
+    years: int = 0
+    points: int = 0
+    percentile: float = 0.0
+    now_rate: float = 0.0
+    median_rate: float = 0.0
+    min_rate: float = 0.0
+    max_rate: float = 0.0
+    vs_median_native: float = 0.0
+
+
+@dataclass(frozen=True)
 class MarketYieldRow:
     """Що ПЕРВИННИЙ ринок платить за строк — останнє розміщення Мінфіну.
 
@@ -336,6 +362,10 @@ class StateDoc:
     # market_yield — крива первинного ринку. Сутностей із неї немає (це
     # таблиця), але сповіщення читає з неї найсвіжіший рядок.
     market_yield: tuple[MarketYieldRow, ...] = field(default_factory=tuple)
+    # fx_window — де стоїть курс серед історії. Сутностей із неї теж немає
+    # (це таблиця): рядки йдуть атрибутами до частки валюти, бо саме там
+    # їх і читають — поруч із питанням «скільки валюти вже маю».
+    fx_window: tuple[FXWindowRow, ...] = field(default_factory=tuple)
     # tasks — черга «що робити», вже впорядкована сервісом.
     #
     # Порожня в двох випадках, і обидва законні: робити справді нічого або
@@ -523,6 +553,7 @@ class StateDoc:
             reserve=_dc(Reserve, raw.get("reserve")),
             concentration=tuple(_dc(ConcentrationRow, r) for r in (raw.get("concentration") or ())),
             market_yield=tuple(_dc(MarketYieldRow, r) for r in (raw.get("market_yield") or ())),
+            fx_window=tuple(_dc(FXWindowRow, r) for r in (raw.get("fx_window") or ())),
             tasks=tuple(_dc(Task, r) for r in (raw.get("tasks") or ())),
         )
 

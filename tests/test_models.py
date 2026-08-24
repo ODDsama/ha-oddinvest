@@ -405,6 +405,31 @@ def test_market_yield_parsed_from_fixture():
     assert doc.best_market_offer().vs_portfolio_pp == 0.72
 
 
+def test_fx_window_parsed_from_fixture():
+    """Три вікна однієї валюти, і vs_median_native є не в кожному.
+
+    Порожнє поле в рядку «10 років» — не недогляд фікстури: різниця до
+    медіани існує лише тоді, коли задано валютну ціль і є дефіцит, і
+    споживач мусить побачити обидва випадки.
+    """
+    doc = StateDoc.from_payload(load("basic.json"))
+    assert len(doc.fx_window) == 3
+    assert {r.years for r in doc.fx_window} == {1, 3, 10}
+    year = next(r for r in doc.fx_window if r.years == 1)
+    assert year.currency == "USD"
+    assert year.percentile == 91.67
+    assert year.points == 12
+    assert year.vs_median_native == -42.19
+    assert next(r for r in doc.fx_window if r.years == 10).vs_median_native == 0.0
+
+
+def test_fx_window_absent_on_old_service():
+    """Старий сервіс поля не надсилає — і це не помилка, а порожній кортеж."""
+    raw = json.loads(load("basic.json"))
+    raw.pop("fx_window", None)
+    assert StateDoc.from_payload(json.dumps(raw)).fx_window == ()
+
+
 def test_settings_parsed():
     doc = StateDoc.from_payload(load("basic.json"))
     assert doc.settings is not None

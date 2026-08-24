@@ -152,8 +152,14 @@ def _register_services(hass: HomeAssistant) -> None:
             await async_refresh_service(hass, entry.runtime_data.base_url)
 
     async def handle_mark_payment(call: ServiceCall) -> None:
-        """oddinvest.mark_payment — позначити виплату received/reinvested,
-        або зняти позначку (status=none)."""
+        """oddinvest.mark_payment — позначити виплату отриманою (received)
+        або зняти позначку (none).
+
+        Статусу «reinvested» більше немає: сервіс скасував його міграцією
+        0017 і від того часу відповідає на нього помилкою. Аргумент
+        записаний у самій міграції, коротко — купон на 82 ₴ не купує
+        нічого, тож у покупку він потрапляє змішаним із власними
+        внесками, і простій тепер рахується сам."""
         body = {
             "isin": call.data["isin"],
             "pay_date": str(call.data["pay_date"]),
