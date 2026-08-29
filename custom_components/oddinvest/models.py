@@ -108,6 +108,10 @@ class Liquidity:
     in_30_uah: float = 0.0
     in_90_uah: float = 0.0
     reserve_uah: float = 0.0
+    # goals_uah — гроші під цілями накопичення. Так само окремо від
+    # now_uah і так само не в locked_uah: ламати нічого не треба, вони
+    # просто чекають своєї дати.
+    goals_uah: float = 0.0
     locked_uah: float = 0.0
     unlock_date: str = ""
     # locked_npf_uah — скільки із замкненого сидить у НПФ. Підполе, а не
@@ -303,6 +307,12 @@ class StateDoc:
     # купівельна спроможність: до 50 років звідси не приходить нічого.
     # Необовʼязкове з тієї ж причини, що й три попередні.
     npf_uah: float = 0.0
+    # goals_uah — цілі накопичення разом, грн-екв.: гроші, відкладені на
+    # названу річ у названу дату. Як і резерв, частина капіталу, але не
+    # купівельна спроможність. Окремо від reserve_uah, бо доля різна:
+    # подушку тримають, ЩОБ НЕ витратити, ціль — щоб витратити.
+    # Необовʼязкове з тієї ж причини, що й чотири попередні.
+    goals_uah: float = 0.0
     # npf_cost_uah — сума внесків. Тримається поруч, бо без неї приріст
     # пенсійної частини не порахувати: вартість і собівартість тут
     # РІЗНІ, на відміну від вкладу чи резерву.
@@ -413,6 +423,7 @@ class StateDoc:
             + self.funds_uah
             + self.deposits_uah
             + self.reserve_uah
+            + self.goals_uah
             + self.npf_uah
         )
 
@@ -518,6 +529,7 @@ class StateDoc:
             funds_uah=float(raw.get("funds_uah", 0.0)),
             deposits_uah=float(raw.get("deposits_uah", 0.0)),
             reserve_uah=float(raw.get("reserve_uah", 0.0)),
+            goals_uah=float(raw.get("goals_uah", 0.0)),
             npf_uah=float(raw.get("npf_uah", 0.0)),
             npf_cost_uah=float(raw.get("npf_cost_uah", 0.0)),
             npf_contrib_due=bool(raw.get("npf_contrib_due", False)),

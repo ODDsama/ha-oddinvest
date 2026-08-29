@@ -177,6 +177,7 @@ def _liquidity_attrs(doc: StateDoc) -> dict[str, Any] | None:
         "now_uah": lq.now_uah,
         "in_90_uah": lq.in_90_uah,
         "reserve_uah": lq.reserve_uah,
+        "goals_uah": lq.goals_uah,
         "locked_uah": lq.locked_uah,
         "locked_npf_uah": lq.locked_npf_uah,
         "unlock_date": lq.unlock_date,
@@ -298,10 +299,12 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=0,
         # Капітал — усе, що в тебе є: папери, гроші, сертифікати фондів,
-        # тіло банківських вкладів, резерв і пенсійні активи. Резерв входить
-        # попри те, що не працює: це твої гроші, і вони або в капіталі, або
-        # ніде. НПФ — попри те, що забрати його не можна до 50 років: капітал
-        # відповідає на «скільки в мене є», а не на «скільки я можу зняти».
+        # тіло банківських вкладів, резерв, цілі накопичення й пенсійні
+        # активи. Резерв входить попри те, що не працює: це твої гроші, і
+        # вони або в капіталі, або ніде. Цілі — з того самого доводу, хоч їх
+        # і витратять: доки річ не куплена, гроші лежать у тебе. НПФ — попри
+        # те, що забрати його не можна до 50 років: капітал відповідає на
+        # «скільки в мене є», а не на «скільки я можу зняти».
         #
         # Сума ЖИВЕ НЕ ТУТ. Сервіс публікує capital_uah готовим числом, і
         # StateDoc.capital() бере саме його, лишаючи складання запасним
@@ -314,7 +317,13 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         # ряд, ні тригер, ні числовий бейдж. Сутності немає ні в funds_uah,
         # ні в deposits_uah, і НПФ тут не виняток.
         attrs_fn=lambda d: {
-            k: v for k, v in (("reserve_uah", d.reserve_uah), ("npf_uah", d.npf_uah)) if v
+            k: v
+            for k, v in (
+                ("reserve_uah", d.reserve_uah),
+                ("goals_uah", d.goals_uah),
+                ("npf_uah", d.npf_uah),
+            )
+            if v
         }
         or None,
     ),
