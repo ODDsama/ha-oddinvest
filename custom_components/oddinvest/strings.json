@@ -34,6 +34,7 @@
           "notify_concentration": "Перевищено ліміт концентрації",
           "notify_auction": "Аукціон дає більше за портфель",
           "notify_npf_contribution": "Внеску в НПФ за цей місяць немає",
+          "notify_actions": "Кнопки дій у сповіщенні (лише mobile_app)",
           "notify_card_due": "Розрахункова дата картки (за 7, 3, 1 день і в день)",
           "notify_card_stale": "Звірка картки застаріла",
           "goal_threshold": "Поріг цілі, % (нижче — попередити)"

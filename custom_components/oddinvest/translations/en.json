@@ -29,6 +29,7 @@
           "notify_reinvest": "Reinvest ready",
           "notify_tomorrow": "Payment tomorrow",
           "notify_goal": "Behind monthly goal",
+          "notify_actions": "Action buttons in notifications (mobile_app only)",
           "notify_card_due": "Card statement date (7, 3, 1 days ahead and on the day)",
           "notify_card_stale": "Card reconciliation is stale",
           "notify_maturity": "Redemption approaching",

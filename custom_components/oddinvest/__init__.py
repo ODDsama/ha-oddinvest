@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 import aiohttp
 from homeassistant.components import mqtt
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
-from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.dispatcher import async_dispatcher_send
@@ -22,6 +22,7 @@ from .const import (
     SIGNAL_AVAILABILITY,
     SIGNAL_STATE_UPDATED,
 )
+from .actions import parse_received
 from .alerts import NotificationManager
 from .models import ContractError, StateDoc
 
@@ -175,3 +176,31 @@ def _register_services(hass: HomeAssistant) -> None:
 
     hass.services.async_register(DOMAIN, SERVICE_REFRESH, handle_refresh)
     hass.services.async_register(DOMAIN, SERVICE_MARK_PAYMENT, handle_mark_payment)
+
+    async def handle_notification_action(event: Event) -> None:
+        """Кнопка в сповіщенні mobile_app — та сама ручка, що mark_payment.
+
+        Слухач один на домен (реєструється разом із сервісами) і чужі
+        кнопки пропускає мовчки: подія спільна для всіх інтеграцій, і
+        сюди прилітає кожна натиснута кнопка кожного застосунку. Своя
+        впізнається за префіксом (actions.py); URI-кнопки подію не
+        кидають узагалі — їх обробляє сам застосунок HA.
+        """
+        parsed = parse_received(str(event.data.get("action", "")))
+        if parsed is None:
+            return
+        isin, pay_date = parsed
+        body = {"isin": isin, "pay_date": pay_date, "status": "received"}
+        for entry in _loaded_entries(hass):
+            try:
+                await _post(
+                    hass,
+                    entry.runtime_data.base_url + "/api/payments/status",
+                    json_body=body,
+                    timeout_s=30,
+                )
+            except HomeAssistantError as err:
+                # Кнопка — не сервіс: помилку нема кому показати, крім журналу.
+                _LOGGER.warning("«Отримано» по %s за %s не записано: %s", isin, pay_date, err)
+
+    hass.bus.async_listen("mobile_app_notification_action", handle_notification_action)

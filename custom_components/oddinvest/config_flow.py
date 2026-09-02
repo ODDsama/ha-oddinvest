@@ -100,6 +100,9 @@ class OddInvestOptionsFlow(OptionsFlow):
                     "notify_npf_contribution",
                     default=o.get("notify_npf_contribution", True),
                 ): bool,
+                # Типово вимкнено: кнопки розуміє лише mobile_app (довід —
+                # у alerts._send).
+                vol.Optional("notify_actions", default=o.get("notify_actions", False)): bool,
                 vol.Optional("notify_card_due", default=o.get("notify_card_due", True)): bool,
                 vol.Optional("notify_card_stale", default=o.get("notify_card_stale", True)): bool,
                 vol.Optional(

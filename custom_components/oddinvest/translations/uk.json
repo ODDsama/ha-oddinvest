@@ -29,6 +29,7 @@
           "notify_reinvest": "Можна реінвестувати",
           "notify_tomorrow": "Завтра виплата",
           "notify_goal": "Відставання від місячної цілі",
+          "notify_actions": "Кнопки дій у сповіщенні (лише mobile_app)",
           "notify_card_due": "Розрахункова дата картки (за 7, 3, 1 день і в день)",
           "notify_card_stale": "Звірка картки застаріла",
           "notify_maturity": "Скоро погашення",

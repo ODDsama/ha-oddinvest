@@ -18,6 +18,7 @@ from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
+from .actions import received_action, uri_action
 from .const import CARD_MARK_STALE_DAYS, DOMAIN, SIGNAL_STATE_UPDATED, STALE_AFTER_H
 
 _LOGGER = logging.getLogger(__name__)
@@ -85,6 +86,10 @@ class NotificationManager:
     def _opt(self, key: str, default: bool = True) -> bool:
         return bool(self._entry.options.get(key, default))
 
+    def _open(self, title: str, route: str) -> dict[str, str]:
+        """Кнопка «відкрити застосунок» на названому маршруті (#/tab/item/pane)."""
+        return uri_action(title, f"{self._entry.runtime_data.base_url}/#/{route}")
+
     @callback
     def _on_state(self) -> None:
         self._hass.async_create_task(self._evaluate())
@@ -110,6 +115,7 @@ class NotificationManager:
                 await self._send(
                     f"reinvest:{c}:{today_s}",
                     f"💰 На {c}-рахунку вистачає на реінвестицію ({bal:,.0f} {c}).",
+                    actions=[self._open("Що купити", "work/buy/main")],
                 )
             if ready != self._prev_ready:
                 self._prev_ready = ready
@@ -121,9 +127,15 @@ class NotificationManager:
         if self._opt("notify_coupon"):
             for p in st.calendar:
                 if p.date == today_s:
+                    # «Отримано» — та сама ручка, що в сервісі mark_payment:
+                    # гроші лягають на рахунок, не чекаючи опівночі.
                     await self._send(
                         f"coupon:{p.isin}:{today_s}",
                         f"📥 Сьогодні виплата: {p.amount:,.0f} {p.currency} по {p.title()}.",
+                        actions=[
+                            {"action": received_action(p.isin, p.date), "title": "Отримано"},
+                            self._open("Відкрити", "work/todo/main"),
+                        ],
                     )
 
         if self._opt("notify_tomorrow"):
@@ -229,6 +241,7 @@ class NotificationManager:
                     f"💳 «{c.name}»: розрахункова дата {when} ({c.due_date}). "
                     f"Принести {c.bring_by_due_uah:,.0f} ₴ — і відсотків не буде; "
                     f"мінімум {c.min_due_uah:,.0f} ₴.",
+                    actions=[self._open("Борги", "plan/debts/main")],
                 )
 
         # Застаріла звірка — раз на місяць, як ліміт концентрації: числа
@@ -256,13 +269,20 @@ class NotificationManager:
                     f"Лишилось {last - today.day} дн.",
                 )
 
-    async def _send(self, key: str, message: str) -> None:
+    async def _send(
+        self, key: str, message: str, actions: list[dict[str, str]] | None = None
+    ) -> None:
         if self._sent.get(key) == date.today().isoformat():
             return
+        payload: dict[str, Any] = {"message": message}
+        # Кнопки — лише за опцією, і вона типово ВИМКНЕНА: data.actions
+        # розуміє mobile_app, а інший notify-сервіс або промовчить, або
+        # відмовить на невідомому полі, і тоді людина втратила б саме
+        # повідомлення. Увімкнути — свідома дія того, хто знає, куди шле.
+        if actions and self._opt("notify_actions", False):
+            payload["data"] = {"actions": actions}
         try:
-            await self._hass.services.async_call(
-                "notify", self._service, {"message": message}, blocking=False
-            )
+            await self._hass.services.async_call("notify", self._service, payload, blocking=False)
         except Exception as err:  # noqa: BLE001
             _LOGGER.warning("сповіщення через notify.%s не надіслано: %s", self._service, err)
             return
