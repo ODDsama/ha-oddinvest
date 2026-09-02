@@ -29,6 +29,8 @@
           "notify_reinvest": "Reinvest ready",
           "notify_tomorrow": "Payment tomorrow",
           "notify_goal": "Behind monthly goal",
+          "notify_card_due": "Card statement date (7, 3, 1 days ahead and on the day)",
+          "notify_card_stale": "Card reconciliation is stale",
           "notify_maturity": "Redemption approaching",
           "notify_stale": "Data is stale",
           "notify_concentration": "Concentration limit exceeded",
@@ -103,9 +105,33 @@
       },
       "tasks": {
         "name": "Tasks"
+      },
+      "net_worth_uah": {
+        "name": "Net worth"
+      },
+      "capital_delta_30_uah": {
+        "name": "Capital, 30-day change"
+      },
+      "debt_total_uah": {
+        "name": "Interest-bearing debt"
+      },
+      "card_bring_by_due_uah": {
+        "name": "Bring to cards by due date"
+      },
+      "card_days_to_due": {
+        "name": "Days to card statement date"
+      },
+      "card_due_date": {
+        "name": "Card statement date"
       }
     },
     "binary_sensor": {
+      "card_due_soon": {
+        "name": "Card statement date is near"
+      },
+      "card_mark_stale": {
+        "name": "Card reconciliation is stale"
+      },
       "has_uninvested": {
         "name": "Uninvested payouts present"
       },

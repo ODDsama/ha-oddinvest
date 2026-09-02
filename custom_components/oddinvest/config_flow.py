@@ -100,6 +100,8 @@ class OddInvestOptionsFlow(OptionsFlow):
                     "notify_npf_contribution",
                     default=o.get("notify_npf_contribution", True),
                 ): bool,
+                vol.Optional("notify_card_due", default=o.get("notify_card_due", True)): bool,
+                vol.Optional("notify_card_stale", default=o.get("notify_card_stale", True)): bool,
                 vol.Optional(
                     "goal_threshold", default=o.get("goal_threshold", 80)
                 ): selector.NumberSelector(

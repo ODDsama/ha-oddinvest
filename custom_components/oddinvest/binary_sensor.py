@@ -11,7 +11,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from . import OddInvestConfigEntry
-from .const import STALE_AFTER_H
+from .const import CARD_DUE_SOON_DAYS, CARD_MARK_STALE_DAYS, STALE_AFTER_H
 from .entity import OddInvestEntity
 
 
@@ -28,8 +28,91 @@ async def async_setup_entry(
             ConcentrationBreachSensor(entry.runtime_data, entry.entry_id),
             NPFContributionDueSensor(entry.runtime_data, entry.entry_id),
             ReserveReadySensor(entry.runtime_data, entry.entry_id),
+            CardDueSoonSensor(entry.runtime_data, entry.entry_id),
+            CardMarkStaleSensor(entry.runtime_data, entry.entry_id),
         ]
     )
+
+
+class CardDueSoonSensor(OddInvestEntity, BinarySensorEntity):
+    """ON = до розрахункової дати картки ≤ 7 днів і принести ще є що.
+
+    Це те саме, від чого в сервісі задача card-due-* переходить у «зараз»
+    (state_tasks.go). Тут окремою сутністю, бо саме її беруть у тригер
+    автоматизації: «увімкни світло червоним» не читає чергу задач.
+
+    Самогасне без нашої участі: платіж на картку зменшує bring_by_due, і
+    щойно він нуль — сенсор off. None без звіреної картки: без звірки
+    сума невідома, і off сказав би «все сплачено» там, де «не знаю».
+    """
+
+    _attr_translation_key = "card_due_soon"
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+
+    def __init__(self, data, entry_id: str) -> None:
+        super().__init__(data, entry_id)
+        self._attr_unique_id = f"{entry_id}_card_due_soon"
+
+    @property
+    def is_on(self) -> bool | None:
+        st = self._data.state
+        if st is None or st.debt is None:
+            return None
+        near = st.debt.nearest()
+        if near is None:
+            return None
+        return near.days_to_due <= CARD_DUE_SOON_DAYS and near.bring_by_due_uah > 0
+
+    @property
+    def extra_state_attributes(self):
+        st = self._data.state
+        near = st.debt.nearest() if st is not None and st.debt is not None else None
+        if near is None:
+            return None
+        return {
+            "name": near.name,
+            "due_date": near.due_date,
+            "days_to_due": near.days_to_due,
+            "bring_by_due_uah": near.bring_by_due_uah,
+            "min_due_uah": near.min_due_uah,
+        }
+
+
+class CardMarkStaleSensor(OddInvestEntity, BinarySensorEntity):
+    """ON = хоч одна картка звірена понад два тижні тому або не звірена зовсім.
+
+    Лікуємо ПОКАЗОМ, як price_stale і data_stale: числа лишаються на
+    екрані, але вік названий. Незвірена картка — той самий стан у
+    граничному вигляді: віку немає, бо немає й числа.
+    """
+
+    _attr_translation_key = "card_mark_stale"
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+
+    def __init__(self, data, entry_id: str) -> None:
+        super().__init__(data, entry_id)
+        self._attr_unique_id = f"{entry_id}_card_mark_stale"
+
+    @property
+    def is_on(self) -> bool | None:
+        st = self._data.state
+        if st is None or st.debt is None or not st.debt.cards:
+            return None
+        return any((not c.known) or c.mark_age_days > CARD_MARK_STALE_DAYS for c in st.debt.cards)
+
+    @property
+    def extra_state_attributes(self):
+        st = self._data.state
+        if st is None or st.debt is None:
+            return None
+        return {
+            "stale": [
+                c.name
+                for c in st.debt.cards
+                if (not c.known) or c.mark_age_days > CARD_MARK_STALE_DAYS
+            ],
+            "threshold_days": CARD_MARK_STALE_DAYS,
+        }
 
 
 class ReinvestReadySensor(OddInvestEntity, BinarySensorEntity):

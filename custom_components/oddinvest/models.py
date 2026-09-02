@@ -157,6 +157,83 @@ class Reserve:
 
 
 @dataclass(frozen=True)
+class DebtCard:
+    """Кредитна картка на сьогодні: умови договору й похідні останньої звірки.
+
+    Джерело балансу — звірка з додатком банку, і вік звірки
+    (mark_age_days) їде поруч із числами навмисно: сенсор, що показує
+    тиждень тому звірене «принести 15 400», каже й те, що йому тиждень.
+    Порожня due_date означає, що число місяця в договорі не задане, — тоді
+    days_to_due нічого не означає, і читати його не треба.
+    """
+
+    name: str = ""
+    known: bool = False
+    mark_date: str = ""
+    mark_age_days: int = 0
+    due_date: str = ""
+    days_to_due: int = 0
+    bring_by_due_uah: float = 0.0
+    min_due_uah: float = 0.0
+    free_uah: float = 0.0
+    debt_uah: float = 0.0
+    used_pct: float = 0.0
+    exit_by: str = ""
+
+    def due(self) -> date | None:
+        return date.fromisoformat(self.due_date) if self.due_date else None
+
+
+@dataclass(frozen=True)
+class DebtPlan:
+    """Борг: те, що він змінює в чужих числах, плюс картки поштучно.
+
+    total_uah — лише борг ПІД СТАВКОЮ (розстрочки й непільгова частина
+    картки); пільговий оборот картки сюди не входить, тож нуль при живій
+    картці — правильна відповідь. Саме тому картки лежать окремим списком:
+    «скільки принести до розрахункової дати» — питання про оборот, а не
+    про борг, і в total_uah його немає.
+    """
+
+    total_uah: float = 0.0
+    top_rate_pct: float = 0.0
+    top_name: str = ""
+    due_this_month_uah: float = 0.0
+    cards: tuple[DebtCard, ...] = field(default_factory=tuple)
+
+    def bring_by_due_uah(self) -> float:
+        """Скільки принести на всі картки разом, щоб відсотків не було."""
+        return sum(c.bring_by_due_uah for c in self.cards if c.known)
+
+    def nearest(self) -> DebtCard | None:
+        """Картка з найближчою розрахунковою датою — або None без дат.
+
+        Лише звірені картки: без звірки дата є, а суми немає, і сенсор
+        «принести до дати» показував би нуль там, де насправді «не знаю».
+        """
+        dated = [c for c in self.cards if c.known and c.due_date]
+        if not dated:
+            return None
+        return min(dated, key=lambda c: c.days_to_due)
+
+
+@dataclass(frozen=True)
+class CapitalDelta:
+    """Рух капіталу за 30 днів проти добового знімка.
+
+    Два числа, а не одне: delta_uah — на скільки змінився капітал,
+    contributed_uah — скільки з цього внесено ззовні. Без другого «+12 000
+    за місяць» читалось би як заробіток, коли 11 000 — власний внесок.
+    """
+
+    from_date: str = ""
+    from_uah: float = 0.0
+    delta_uah: float = 0.0
+    delta_pct: float = 0.0
+    contributed_uah: float = 0.0
+
+
+@dataclass(frozen=True)
 class ConcentrationRow:
     """Один вимір концентрації: папір, установа або рік погашень.
 
@@ -368,6 +445,18 @@ class StateDoc:
     independence: Independence | None = None
     liquidity: Liquidity | None = None
     reserve: Reserve | None = None
+    # net_worth_uah — ЧИСТИЙ капітал: capital_uah мінус усе, що винен,
+    # включно з пільговим боргом картки. None, а не 0.0, з того самого
+    # доводу, що в capital_uah: чистий капітал законно буває нулем (і
+    # відʼємним), тож нулем не відрізнити «сервіс сказав» від «сервіс
+    # старий». Без боргів сервіс поля не надсилає (omitempty), і тоді
+    # чистий капітал дорівнює капіталу — див. net_worth().
+    net_worth_uah: float | None = None
+    # capital_delta_30 — рух капіталу за 30 днів. None, доки в сервіса
+    # немає знімка місячної давнини або сервіс старший за поле.
+    capital_delta_30: CapitalDelta | None = None
+    # debt — борг і картки. None = боргів немає або сервіс старший.
+    debt: DebtPlan | None = None
     concentration: tuple[ConcentrationRow, ...] = field(default_factory=tuple)
     # market_yield — крива первинного ринку. Сутностей із неї немає (це
     # таблиця), але сповіщення читає з неї найсвіжіший рядок.
@@ -397,6 +486,18 @@ class StateDoc:
         "ladder",
         "top_payments",
     )
+
+    def net_worth(self) -> float:
+        """Чистий капітал: готове число сервіса, а без нього — капітал.
+
+        Без боргів сервіс net_worth_uah не надсилає (omitempty), і тоді
+        чистий капітал дорівнює капіталу за означенням — це не запасний
+        шлях для старого бекенда, а відповідь. Старий бекенд без поля
+        нічим не відрізнити, і для нього відповідь та сама.
+        """
+        if self.net_worth_uah is not None:
+            return self.net_worth_uah
+        return self.capital()
 
     def capital(self) -> float:
         """Увесь капітал, грн-екв.
@@ -563,11 +664,55 @@ class StateDoc:
             independence=_dc(Independence, raw.get("independence")),
             liquidity=_dc(Liquidity, raw.get("liquidity")),
             reserve=_dc(Reserve, raw.get("reserve")),
+            net_worth_uah=(
+                float(raw["net_worth_uah"]) if raw.get("net_worth_uah") is not None else None
+            ),
+            capital_delta_30=_dc(CapitalDelta, raw.get("capital_delta_30")),
+            debt=_debt(raw.get("debt")),
             concentration=tuple(_dc(ConcentrationRow, r) for r in (raw.get("concentration") or ())),
             market_yield=tuple(_dc(MarketYieldRow, r) for r in (raw.get("market_yield") or ())),
             fx_window=tuple(_dc(FXWindowRow, r) for r in (raw.get("fx_window") or ())),
             tasks=tuple(_dc(Task, r) for r in (raw.get("tasks") or ())),
         )
+
+
+def _debt(raw: dict[str, Any] | None) -> DebtPlan | None:
+    """Блок debt: скаляри через _dc, картки — руками.
+
+    _dc уміє лише плоскі скаляри, а cards — список обʼєктів; той самий
+    випадок, що next_payment і calendar. Поля exit і fill_* сервіса тут
+    не читаються: вони проєкція плану виходу й стелі дострокового, і
+    сутності з них немає — атрибути без читача були б порожнім швом.
+    """
+    if not raw:
+        return None
+    plan = _dc(DebtPlan, raw)
+    return DebtPlan(
+        total_uah=plan.total_uah,
+        top_rate_pct=plan.top_rate_pct,
+        top_name=plan.top_name,
+        due_this_month_uah=plan.due_this_month_uah,
+        cards=tuple(_card(c) for c in (raw.get("cards") or ()) if c),
+    )
+
+
+def _card(raw: dict[str, Any]) -> DebtCard:
+    # known — bool, а _dc зводить усе до int/float/str: рядок "False" був
+    # би істинним. Тому картка збирається явно, полем за полем.
+    return DebtCard(
+        name=str(raw.get("name", "")),
+        known=bool(raw.get("known", False)),
+        mark_date=str(raw.get("mark_date", "")),
+        mark_age_days=int(raw.get("mark_age_days", 0)),
+        due_date=str(raw.get("due_date", "")),
+        days_to_due=int(raw.get("days_to_due", 0)),
+        bring_by_due_uah=float(raw.get("bring_by_due_uah", 0.0)),
+        min_due_uah=float(raw.get("min_due_uah", 0.0)),
+        free_uah=float(raw.get("free_uah", 0.0)),
+        debt_uah=float(raw.get("debt_uah", 0.0)),
+        used_pct=float(raw.get("used_pct", 0.0)),
+        exit_by=str(raw.get("exit_by", "")),
+    )
 
 
 def _dc(cls, raw: dict[str, Any] | None):

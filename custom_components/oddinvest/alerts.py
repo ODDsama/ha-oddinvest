@@ -18,7 +18,7 @@ from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, SIGNAL_STATE_UPDATED, STALE_AFTER_H
+from .const import CARD_MARK_STALE_DAYS, DOMAIN, SIGNAL_STATE_UPDATED, STALE_AFTER_H
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -208,6 +208,43 @@ class NotificationManager:
                 f"npf:{today.strftime('%Y-%m')}",
                 "🏦 Внеску в пенсійний за цей місяць ще немає.",
             )
+
+        # Розрахункова дата картки — найцінніше сповіщення для того, хто
+        # виходить із ліміту: пропущений день коштує відсотків на весь борг.
+        #
+        # Чотири рубежі (7, 3, 1, 0 днів), кожен зі своїм ключем дедупу, і
+        # дата в ключі — щоб наступний цикл почав відлік заново. Не щодня:
+        # сім однакових сповіщень поспіль привчають ігнорувати восьме (той
+        # самий висновок, що в notify_concentration). Самогасне: платіж
+        # зменшує bring_by_due, і при нулі казати нема чого.
+        if self._opt("notify_card_due") and st.debt is not None:
+            for c in st.debt.cards:
+                if not c.known or not c.due_date or c.bring_by_due_uah <= 0:
+                    continue
+                if c.days_to_due not in (7, 3, 1, 0):
+                    continue
+                when = "сьогодні" if c.days_to_due == 0 else f"за {c.days_to_due} дн."
+                await self._send(
+                    f"card:{c.name}:{c.due_date}:{c.days_to_due}",
+                    f"💳 «{c.name}»: розрахункова дата {when} ({c.due_date}). "
+                    f"Принести {c.bring_by_due_uah:,.0f} ₴ — і відсотків не буде; "
+                    f"мінімум {c.min_due_uah:,.0f} ₴.",
+                )
+
+        # Застаріла звірка — раз на місяць, як ліміт концентрації: числа
+        # й так лишаються на екрані з віком поруч, а щоденне «звір картку»
+        # людина, яка не звіряє, вимкне цілком.
+        if self._opt("notify_card_stale") and st.debt is not None:
+            month = today.strftime("%Y-%m")
+            for c in st.debt.cards:
+                if c.known and c.mark_age_days <= CARD_MARK_STALE_DAYS:
+                    continue
+                age = f"числам {c.mark_age_days} дн." if c.known else "звірки ще не було"
+                await self._send(
+                    f"cardstale:{c.name}:{month}",
+                    f"🧾 «{c.name}»: {age} — звір із додатком банку, "
+                    f"інакше «скільки принести» стоїть на спогаді.",
+                )
 
         if self._opt("notify_goal"):
             last = _cal.monthrange(today.year, today.month)[1]

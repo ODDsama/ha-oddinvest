@@ -198,6 +198,96 @@ def _reserve_attrs(doc: StateDoc) -> dict[str, Any] | None:
     }
 
 
+def _delta_attrs(doc: StateDoc) -> dict[str, Any] | None:
+    """Внесене ззовні — поруч із дельтою, і саме тому дельта чесна.
+
+    «+12 000 за місяць» без цього числа читалось би як заробіток, коли
+    11 000 із них — власний внесок. Різницю споживач рахує сам одним
+    відніманням; окремого поля «заробило» тут немає навмисно — воно
+    змішувало б переоцінку курсу з купонами, а на це є XIRR.
+    """
+    d = doc.capital_delta_30
+    if d is None:
+        return None
+    return {
+        "from_date": d.from_date,
+        "from_uah": d.from_uah,
+        "delta_pct": d.delta_pct,
+        "contributed_uah": d.contributed_uah,
+    }
+
+
+def _debt_attrs(doc: StateDoc) -> dict[str, Any] | None:
+    d = doc.debt
+    if d is None:
+        return None
+    return {
+        "top_name": d.top_name,
+        "top_rate_pct": d.top_rate_pct,
+        "due_this_month_uah": d.due_this_month_uah,
+    }
+
+
+def _card_bring(doc: StateDoc) -> float | None:
+    """Скільки принести на картки, щоб відсотків не було — разом.
+
+    None без звіреної картки: нуль сказав би «нічого не винен» там, де
+    насправді «не знаю» (той самий вибір, що в DebtCard.known).
+    """
+    d = doc.debt
+    if d is None or not any(c.known for c in d.cards):
+        return None
+    return d.bring_by_due_uah()
+
+
+def _card_days(doc: StateDoc) -> int | None:
+    d = doc.debt
+    c = d.nearest() if d is not None else None
+    return None if c is None else c.days_to_due
+
+
+def _card_due_date(doc: StateDoc) -> date | None:
+    d = doc.debt
+    c = d.nearest() if d is not None else None
+    return None if c is None else c.due()
+
+
+def _cards_attrs(doc: StateDoc) -> dict[str, Any] | None:
+    """Картки поштучно — атрибутом, а не сутністю на картку.
+
+    Довід той самий, що в черзі задач: картки закриваються й зʼявляються,
+    а сутність, яка зникає, ламає автоматизації, що на неї посилаються.
+    Число ж лишається числом. Найближча — окремими полями, бо
+    автоматизації «скажи вголос» потрібен один рядок, а не список.
+    """
+    d = doc.debt
+    if d is None:
+        return None
+    near = d.nearest()
+    return {
+        "nearest": near.name if near else "",
+        "nearest_bring_uah": near.bring_by_due_uah if near else 0.0,
+        "nearest_min_uah": near.min_due_uah if near else 0.0,
+        "cards": [
+            {
+                "name": c.name,
+                "known": c.known,
+                "mark_date": c.mark_date,
+                "mark_age_days": c.mark_age_days,
+                "due_date": c.due_date,
+                "days_to_due": c.days_to_due,
+                "bring_by_due_uah": c.bring_by_due_uah,
+                "min_due_uah": c.min_due_uah,
+                "free_uah": c.free_uah,
+                "debt_uah": c.debt_uah,
+                "used_pct": c.used_pct,
+                "exit_by": c.exit_by,
+            }
+            for c in d.cards
+        ],
+    }
+
+
 def _tasks_attrs(doc: StateDoc) -> dict[str, Any]:
     """Черга задач атрибутом, у порядку, який дав сервіс.
 
@@ -456,6 +546,65 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         value_fn=lambda d: d.reserve.months if d.reserve else None,
         attrs_fn=_reserve_attrs,
     ),
+    # Чистий капітал — ОКРЕМО від капіталу, а не замість нього: на капіталі
+    # стоять частки й дохідності, і відʼємне число їх зламало б. Це
+    # відповідь на «скільки в мене насправді», і саме її будують у графік,
+    # коли виходять із боргу.
+    OddInvestSensorDescription(
+        key="net_worth_uah",
+        translation_key="net_worth_uah",
+        native_unit_of_measurement="UAH",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        suggested_display_precision=0,
+        value_fn=lambda d: d.net_worth(),
+    ),
+    OddInvestSensorDescription(
+        key="capital_delta_30_uah",
+        translation_key="capital_delta_30_uah",
+        native_unit_of_measurement="UAH",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        value_fn=lambda d: d.capital_delta_30.delta_uah if d.capital_delta_30 else None,
+        attrs_fn=_delta_attrs,
+    ),
+    OddInvestSensorDescription(
+        key="debt_total_uah",
+        translation_key="debt_total_uah",
+        native_unit_of_measurement="UAH",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL,
+        suggested_display_precision=0,
+        # Нуль тут — відповідь, а не мовчання: борг ПІД СТАВКОЮ при живій
+        # картці законно нульовий. Мовчить лише без блоку debt узагалі.
+        value_fn=lambda d: d.debt.total_uah if d.debt else None,
+        attrs_fn=_debt_attrs,
+    ),
+    OddInvestSensorDescription(
+        key="card_bring_by_due_uah",
+        translation_key="card_bring_by_due_uah",
+        native_unit_of_measurement="UAH",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        value_fn=_card_bring,
+        attrs_fn=_cards_attrs,
+    ),
+    OddInvestSensorDescription(
+        key="card_days_to_due",
+        translation_key="card_days_to_due",
+        native_unit_of_measurement="дн.",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        value_fn=_card_days,
+    ),
+    OddInvestSensorDescription(
+        key="card_due_date",
+        translation_key="card_due_date",
+        device_class=SensorDeviceClass.DATE,
+        value_fn=_card_due_date,
+    ),
     OddInvestSensorDescription(
         key="tasks",
         translation_key="tasks",
@@ -493,7 +642,9 @@ class OddInvestSensor(OddInvestEntity, SensorEntity):
     # на КОЖНУ мутацію портфеля, а її рядки — це проза, тобто найдорожче з
     # усього, що могло б потрапити в базу історії. Число задач лишається
     # станом сенсора й пишеться нормально — саме його й будують у графік.
-    _unrecorded_attributes = frozenset({"ladder", "top_payments", "tasks"})
+    # cards — з тієї самої причини: таблиця карток перевидається з кожним
+    # документом, а історію її рядків ніхто не читає.
+    _unrecorded_attributes = frozenset({"ladder", "top_payments", "tasks", "cards"})
 
     def __init__(self, data, entry_id: str, desc: OddInvestSensorDescription) -> None:
         super().__init__(data, entry_id)

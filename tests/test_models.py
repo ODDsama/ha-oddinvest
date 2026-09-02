@@ -607,3 +607,79 @@ def test_capital_fallback_includes_npf():
     raw_no_npf["npf_uah"] = 0
     without = StateDoc.from_payload(json.dumps(raw_no_npf))
     assert expected - without.capital() == with_npf.npf_uah
+
+
+def test_debt_parsed():
+    """Блок debt читається: скаляри й картки поштучно, known — справжній bool."""
+    doc = StateDoc.from_payload(load("basic.json"))
+    assert doc.debt is not None
+    assert doc.debt.total_uah == 5000
+    assert doc.debt.top_name == "ПУМБ ВсеМожу"
+    assert len(doc.debt.cards) == 1
+    card = doc.debt.cards[0]
+    assert card.known is True
+    assert card.due_date == "2026-07-30"
+    assert card.days_to_due == 15
+    assert isinstance(card.days_to_due, int)
+    assert card.bring_by_due_uah == 15400
+    assert card.free_uah == -15400
+    assert card.due() == date(2026, 7, 30)
+    # Похідні для сенсорів: сума «принести» і найближча картка.
+    assert doc.debt.bring_by_due_uah() == 15400
+    assert doc.debt.nearest() is card
+
+
+def test_debt_nearest_skips_unknown_and_undated():
+    """Незвірена картка й картка без числа місяця в «найближчі» не йдуть.
+
+    Без звірки дата є, а суми немає; без числа місяця немає й дати. Обидві
+    показали б «принести 0 до …» там, де насправді «не знаю».
+    """
+    raw = json.loads(load("basic.json"))
+    known = dict(raw["debt"]["cards"][0])
+    raw["debt"]["cards"] = [
+        {**known, "name": "незвірена", "known": False, "days_to_due": 1},
+        {**known, "name": "без дати", "due_date": "", "days_to_due": 0},
+        {**known, "name": "далека", "days_to_due": 20},
+    ]
+    doc = StateDoc.from_payload(json.dumps(raw))
+    assert doc.debt.nearest().name == "далека"
+    # А в суму «принести» незвірена не входить, картка без дати — входить:
+    # сума виписки в неї відома, невідомо лише коли.
+    assert doc.debt.bring_by_due_uah() == 2 * known["bring_by_due_uah"]
+
+
+def test_debt_absent_on_old_service():
+    """Сервіс без блоку debt — None, а не порожній борг."""
+    raw = json.loads(load("basic.json"))
+    raw.pop("debt", None)
+    doc = StateDoc.from_payload(json.dumps(raw))
+    assert doc.debt is None
+
+
+def test_net_worth_parsed_and_falls_back_to_capital():
+    """Чистий капітал — готове число; без нього дорівнює капіталу."""
+    doc = StateDoc.from_payload(load("basic.json"))
+    assert doc.net_worth_uah is not None
+    assert doc.net_worth() == doc.net_worth_uah
+    assert doc.net_worth() < doc.capital()
+
+    raw = json.loads(load("basic.json"))
+    raw.pop("net_worth_uah", None)
+    plain = StateDoc.from_payload(json.dumps(raw))
+    assert plain.net_worth_uah is None
+    assert plain.net_worth() == plain.capital()
+
+
+def test_capital_delta_parsed():
+    """Дельта за 30 днів — двома числами: рух і внесене ззовні."""
+    doc = StateDoc.from_payload(load("basic.json"))
+    d = doc.capital_delta_30
+    assert d is not None
+    assert d.from_date == "2026-06-15"
+    assert d.delta_uah == 5000
+    assert d.contributed_uah == 4500
+
+    raw = json.loads(load("basic.json"))
+    raw.pop("capital_delta_30", None)
+    assert StateDoc.from_payload(json.dumps(raw)).capital_delta_30 is None
