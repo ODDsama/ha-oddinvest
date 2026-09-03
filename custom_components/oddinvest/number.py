@@ -111,7 +111,7 @@ class OddInvestNumber(OddInvestEntity, NumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         await async_put_setting(
             self.hass,
-            self._data.base_url,
+            self._data,
             self.entity_description.setting_key,
             self.entity_description.to_payload(value),
         )

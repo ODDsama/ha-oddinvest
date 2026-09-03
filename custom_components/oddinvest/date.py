@@ -59,4 +59,4 @@ class GoalDate(OddInvestEntity, DateEntity):
             return None
 
     async def async_set_value(self, value: date) -> None:
-        await async_put_setting(self.hass, self._data.base_url, SETTING_KEY, value.isoformat())
+        await async_put_setting(self.hass, self._data, SETTING_KEY, value.isoformat())

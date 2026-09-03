@@ -4,6 +4,15 @@ DOMAIN = "oddinvest"
 
 CONF_BASE_URL = "base_url"
 CONF_TOPIC_PREFIX = "topic_prefix"
+# CONF_TOKEN — Bearer для REST, коли на сервісі стоїть замок
+# (ODDINVEST_AUTH_TOKEN). Порожньо = сервіс без авторизації, як досі.
+CONF_TOKEN = "token"
+# CONF_PUBLIC_URL — адреса, з якої застосунок відкривається З ТЕЛЕФОНА
+# (https через тунель). Лише для посилань у сповіщеннях і картки
+# пристрою; REST і далі ходить на base_url у локальній мережі, бо
+# зовнішній вхід може стояти за другим замком (Cloudflare Access), якого
+# машина не пройде.
+CONF_PUBLIC_URL = "public_url"
 
 DEFAULT_PREFIX = "oddinvest"
 

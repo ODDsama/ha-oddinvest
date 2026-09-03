@@ -21,7 +21,9 @@ class OddInvestEntity(Entity):
             identifiers={(DOMAIN, entry_id)},
             name="ODD Invest",
             manufacturer="ODDsama",
-            configuration_url=data.base_url,
+            # Посилання з картки пристрою відкриває людина — тож публічна
+            # адреса, якщо вона задана (див. const.CONF_PUBLIC_URL).
+            configuration_url=data.open_url,
         )
 
     async def async_added_to_hass(self) -> None:

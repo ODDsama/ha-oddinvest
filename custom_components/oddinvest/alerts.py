@@ -87,8 +87,11 @@ class NotificationManager:
         return bool(self._entry.options.get(key, default))
 
     def _open(self, title: str, route: str) -> dict[str, str]:
-        """Кнопка «відкрити застосунок» на названому маршруті (#/tab/item/pane)."""
-        return uri_action(title, f"{self._entry.runtime_data.base_url}/#/{route}")
+        """Кнопка «відкрити застосунок» на названому маршруті (#/tab/item/pane).
+
+        open_url, а не base_url: кнопку тисне людина з телефона, і поза
+        домом адреса локальної мережі не відкриється."""
+        return uri_action(title, f"{self._entry.runtime_data.open_url}/#/{route}")
 
     @callback
     def _on_state(self) -> None:

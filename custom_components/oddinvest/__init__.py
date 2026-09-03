@@ -15,6 +15,8 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .const import (
     CONF_BASE_URL,
+    CONF_PUBLIC_URL,
+    CONF_TOKEN,
     CONF_TOPIC_PREFIX,
     DOMAIN,
     SERVICE_MARK_PAYMENT,
@@ -39,10 +41,20 @@ class OddInvestData:
 
     base_url: str
     prefix: str
+    # token — Bearer для REST, коли на сервісі стоїть замок; порожньо =
+    # без заголовка. public_url — адреса для людини (посилання в
+    # сповіщеннях, картка пристрою); порожньо = base_url. Довід у const.py.
+    token: str = ""
+    public_url: str = ""
     state: StateDoc | None = None
     available: bool = False
     unsubscribers: list = field(default_factory=list)
     alerts: object | None = None
+
+    @property
+    def open_url(self) -> str:
+        """Звідки застосунок відкриває людина."""
+        return self.public_url or self.base_url
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: OddInvestConfigEntry) -> bool:
@@ -52,6 +64,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: OddInvestConfigEntry) ->
     data = OddInvestData(
         base_url=entry.data[CONF_BASE_URL].rstrip("/"),
         prefix=entry.data[CONF_TOPIC_PREFIX],
+        token=str(entry.data.get(CONF_TOKEN, "")),
+        public_url=str(entry.data.get(CONF_PUBLIC_URL, "")).rstrip("/"),
     )
     entry.runtime_data = data
 
@@ -102,15 +116,36 @@ async def async_unload_entry(hass: HomeAssistant, entry: OddInvestConfigEntry) -
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
-async def _post(
-    hass: HomeAssistant, url: str, json_body: dict | None = None, timeout_s: int = 120
+async def _request(
+    hass: HomeAssistant,
+    data: OddInvestData,
+    method: str,
+    path: str,
+    json_body: dict | None = None,
+    timeout_s: int = 120,
 ) -> None:
-    """POST у REST oddinvestd з нормальними помилками для UI."""
+    """Запит у REST oddinvestd з нормальними помилками для UI.
+
+    Один на POST і PUT: доти їх було два близнюки, і токен довелося б
+    додавати в обидва. 401 названий окремо — «сервіс відповів 401» читалось
+    би як його поломка, а це наш токен не той (або сервіс щойно закрили
+    паролем, а інтеграцію не переналаштували)."""
     session = async_get_clientsession(hass)
+    url = data.base_url + path
+    headers = {"Authorization": f"Bearer {data.token}"} if data.token else {}
     try:
-        async with session.post(
-            url, json=json_body, timeout=aiohttp.ClientTimeout(total=timeout_s)
+        async with session.request(
+            method,
+            url,
+            json=json_body,
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=timeout_s),
         ) as resp:
+            if resp.status == 401:
+                raise HomeAssistantError(
+                    "oddinvestd не приймає токен: сервіс закритий паролем, "
+                    "задай ODDINVEST_AUTH_TOKEN у переналаштуванні інтеграції"
+                )
             if resp.status >= 400:
                 body = await resp.text()
                 raise HomeAssistantError(f"oddinvestd відповів {resp.status}: {body[:200]}")
@@ -118,23 +153,13 @@ async def _post(
         raise HomeAssistantError(f"Не досягли oddinvestd за {url}: {err}") from err
 
 
-async def async_refresh_service(hass: HomeAssistant, base_url: str) -> None:
-    await _post(hass, base_url + "/api/refresh")
+async def async_refresh_service(hass: HomeAssistant, data: OddInvestData) -> None:
+    await _request(hass, data, "POST", "/api/refresh")
 
 
-async def async_put_setting(hass: HomeAssistant, base_url: str, key: str, value: str) -> None:
+async def async_put_setting(hass: HomeAssistant, data: OddInvestData, key: str, value: str) -> None:
     """PUT одного налаштування; сервіс сам перепублікує стан у MQTT."""
-    session = async_get_clientsession(hass)
-    url = base_url + "/api/settings"
-    try:
-        async with session.put(
-            url, json={key: value}, timeout=aiohttp.ClientTimeout(total=30)
-        ) as resp:
-            if resp.status >= 400:
-                body = await resp.text()
-                raise HomeAssistantError(f"oddinvestd відповів {resp.status}: {body[:200]}")
-    except aiohttp.ClientError as err:
-        raise HomeAssistantError(f"Не досягли oddinvestd за {url}: {err}") from err
+    await _request(hass, data, "PUT", "/api/settings", json_body={key: value}, timeout_s=30)
 
 
 def _loaded_entries(hass: HomeAssistant) -> list[OddInvestConfigEntry]:
@@ -150,7 +175,7 @@ def _register_services(hass: HomeAssistant) -> None:
     async def handle_refresh(call: ServiceCall) -> None:
         """oddinvest.refresh — оновити довідник НБУ і курс на боці сервіса."""
         for entry in _loaded_entries(hass):
-            await async_refresh_service(hass, entry.runtime_data.base_url)
+            await async_refresh_service(hass, entry.runtime_data)
 
     async def handle_mark_payment(call: ServiceCall) -> None:
         """oddinvest.mark_payment — позначити виплату отриманою (received)
@@ -167,9 +192,11 @@ def _register_services(hass: HomeAssistant) -> None:
             "status": call.data["status"],
         }
         for entry in _loaded_entries(hass):
-            await _post(
+            await _request(
                 hass,
-                entry.runtime_data.base_url + "/api/payments/status",
+                entry.runtime_data,
+                "POST",
+                "/api/payments/status",
                 json_body=body,
                 timeout_s=30,
             )
@@ -193,9 +220,11 @@ def _register_services(hass: HomeAssistant) -> None:
         body = {"isin": isin, "pay_date": pay_date, "status": "received"}
         for entry in _loaded_entries(hass):
             try:
-                await _post(
+                await _request(
                     hass,
-                    entry.runtime_data.base_url + "/api/payments/status",
+                    entry.runtime_data,
+                    "POST",
+                    "/api/payments/status",
                     json_body=body,
                     timeout_s=30,
                 )

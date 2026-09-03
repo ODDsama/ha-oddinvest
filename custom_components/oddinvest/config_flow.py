@@ -1,4 +1,5 @@
-"""Config flow: адреса REST oddinvestd + префікс MQTT-топіків."""
+"""Config flow: адреса REST oddinvestd + префікс MQTT-топіків (+ токен і
+публічна адреса, коли сервіс закритий паролем і виведений назовні)."""
 
 from __future__ import annotations
 
@@ -16,15 +17,67 @@ from homeassistant.core import callback
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import CONF_BASE_URL, CONF_TOPIC_PREFIX, DEFAULT_PREFIX, DOMAIN
+from .const import (
+    CONF_BASE_URL,
+    CONF_PUBLIC_URL,
+    CONF_TOKEN,
+    CONF_TOPIC_PREFIX,
+    DEFAULT_PREFIX,
+    DOMAIN,
+)
 from .models import ContractError, StateDoc
 
-DATA_SCHEMA = vol.Schema(
-    {
-        vol.Required(CONF_BASE_URL, default="http://"): str,
-        vol.Required(CONF_TOPIC_PREFIX, default=DEFAULT_PREFIX): str,
+
+def _schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
+    """Одна схема на перше налаштування й на переналаштування: поля ті самі,
+    різняться лише типові значення."""
+    d = defaults or {}
+    return vol.Schema(
+        {
+            vol.Required(CONF_BASE_URL, default=d.get(CONF_BASE_URL, "http://")): str,
+            vol.Required(CONF_TOPIC_PREFIX, default=d.get(CONF_TOPIC_PREFIX, DEFAULT_PREFIX)): str,
+            # Обидва необовʼязкові й типово порожні: сервіс без замка
+            # працює як досі, і міграції запису не треба — читаються через
+            # entry.data.get(...).
+            vol.Optional(CONF_TOKEN, default=d.get(CONF_TOKEN, "")): str,
+            vol.Optional(CONF_PUBLIC_URL, default=d.get(CONF_PUBLIC_URL, "")): str,
+        }
+    )
+
+
+def _normalize(user_input: dict[str, Any]) -> dict[str, str]:
+    return {
+        CONF_BASE_URL: user_input[CONF_BASE_URL].rstrip("/"),
+        CONF_TOPIC_PREFIX: user_input[CONF_TOPIC_PREFIX].strip().strip("/"),
+        CONF_TOKEN: str(user_input.get(CONF_TOKEN, "")).strip(),
+        CONF_PUBLIC_URL: str(user_input.get(CONF_PUBLIC_URL, "")).strip().rstrip("/"),
     }
-)
+
+
+async def _probe(hass, data: dict[str, str]) -> str | None:
+    """Чи відповідає сервіс за base_url і чи наш у нього контракт.
+    Повертає ключ помилки або None."""
+    session = async_get_clientsession(hass)
+    headers = {"Authorization": f"Bearer {data[CONF_TOKEN]}"} if data[CONF_TOKEN] else {}
+    try:
+        async with session.get(
+            f"{data[CONF_BASE_URL]}/api/summary",
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=10),
+        ) as resp:
+            # 401 окремо від «не зʼєднались»: сервіс є, це токен не той
+            # (або його забули), і людині треба саме це, а не «перевір
+            # адресу».
+            if resp.status == 401:
+                return "invalid_auth"
+            if resp.status != 200:
+                return "cannot_connect"
+            StateDoc.from_payload(await resp.text())
+    except aiohttp.ClientError:
+        return "cannot_connect"
+    except ContractError:
+        return "bad_contract"
+    return None
 
 
 class OddInvestConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -38,32 +91,44 @@ class OddInvestConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
-            base = user_input[CONF_BASE_URL].rstrip("/")
-            prefix = user_input[CONF_TOPIC_PREFIX].strip().strip("/")
-            await self.async_set_unique_id(prefix)
+            data = _normalize(user_input)
+            await self.async_set_unique_id(data[CONF_TOPIC_PREFIX])
             self._abort_if_unique_id_configured()
 
-            session = async_get_clientsession(self.hass)
-            try:
-                async with session.get(
-                    f"{base}/api/summary", timeout=aiohttp.ClientTimeout(total=10)
-                ) as resp:
-                    if resp.status != 200:
-                        errors["base"] = "cannot_connect"
-                    else:
-                        StateDoc.from_payload(await resp.text())
-            except aiohttp.ClientError:
-                errors["base"] = "cannot_connect"
-            except ContractError:
-                errors["base"] = "bad_contract"
-
-            if not errors:
+            err = await _probe(self.hass, data)
+            if err:
+                errors["base"] = err
+            else:
                 return self.async_create_entry(
-                    title=f"ODD Invest ({prefix})",
-                    data={CONF_BASE_URL: base, CONF_TOPIC_PREFIX: prefix},
+                    title=f"ODD Invest ({data[CONF_TOPIC_PREFIX]})", data=data
                 )
 
-        return self.async_show_form(step_id="user", data_schema=DATA_SCHEMA, errors=errors)
+        return self.async_show_form(step_id="user", data_schema=_schema(), errors=errors)
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Переналаштувати наявний запис — дописати токен чи публічну адресу,
+        не видаляючи інтеграцію (з нею зникла б історія сутностей)."""
+        entry = self._get_reconfigure_entry()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            data = _normalize(user_input)
+            # Префікс — це unique_id запису; змінити його означало б інший
+            # запис. Тут він лише звіряється.
+            await self.async_set_unique_id(data[CONF_TOPIC_PREFIX])
+            self._abort_if_unique_id_mismatch()
+            err = await _probe(self.hass, data)
+            if err:
+                errors["base"] = err
+            else:
+                return self.async_update_reload_and_abort(entry, data_updates=data)
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=_schema({**entry.data, **(user_input or {})}),
+            errors=errors,
+        )
 
 
 class OddInvestOptionsFlow(OptionsFlow):

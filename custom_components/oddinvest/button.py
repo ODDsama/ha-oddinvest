@@ -30,4 +30,4 @@ class RefreshButton(OddInvestEntity, ButtonEntity):
         return True
 
     async def async_press(self) -> None:
-        await async_refresh_service(self.hass, self._data.base_url)
+        await async_refresh_service(self.hass, self._data)
