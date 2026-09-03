@@ -218,6 +218,33 @@ class DebtPlan:
 
 
 @dataclass(frozen=True)
+class IdleCash:
+    """Простій: вільні гроші брокера, на які квиток уже є.
+
+    investable_uah — скільки можна вкласти вже; since/days — відколи
+    лежить. Ціна — в окремому IdleCost: сервіс розводить факт про гаманець
+    і пораду про сьогоднішній ринок. Розріз по парах (by_pair) інтеграція
+    не читає: це таблиця для веб-інтерфейсу.
+    """
+
+    investable_uah: float = 0.0
+    since: str = ""
+    days: int = 0
+    age_days: float = 0.0
+
+
+@dataclass(frozen=True)
+class IdleCost:
+    """Що коштує простій за сьогоднішньою порадою: на місяць, від дат
+    надходжень, і звідки ставка."""
+
+    cost_month_uah: float = 0.0
+    cost_so_far_uah: float = 0.0
+    rate_pct: float = 0.0
+    rate_label: str = ""
+
+
+@dataclass(frozen=True)
 class CapitalDelta:
     """Рух капіталу за 30 днів проти добового знімка.
 
@@ -455,6 +482,13 @@ class StateDoc:
     # capital_delta_30 — рух капіталу за 30 днів. None, доки в сервіса
     # немає знімка місячної давнини або сервіс старший за поле.
     capital_delta_30: CapitalDelta | None = None
+    # idle — простій. None = простою немає (жодна пара брокер × валюта не
+    # дотягує до квитка) або сервіс старший за поле; сенсор тоді unknown,
+    # а не 0: нуль тут означав би «порахували, лежить нічого».
+    idle: IdleCash | None = None
+    # idle_cost — ціна простою. None = простою немає, поради для цих
+    # грошей немає або сервіс старший.
+    idle_cost: IdleCost | None = None
     # debt — борг і картки. None = боргів немає або сервіс старший.
     debt: DebtPlan | None = None
     concentration: tuple[ConcentrationRow, ...] = field(default_factory=tuple)
@@ -668,6 +702,8 @@ class StateDoc:
                 float(raw["net_worth_uah"]) if raw.get("net_worth_uah") is not None else None
             ),
             capital_delta_30=_dc(CapitalDelta, raw.get("capital_delta_30")),
+            idle=_dc(IdleCash, raw.get("idle")),
+            idle_cost=_dc(IdleCost, raw.get("idle_cost")),
             debt=_debt(raw.get("debt")),
             concentration=tuple(_dc(ConcentrationRow, r) for r in (raw.get("concentration") or ())),
             market_yield=tuple(_dc(MarketYieldRow, r) for r in (raw.get("market_yield") or ())),

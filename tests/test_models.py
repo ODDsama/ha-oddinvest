@@ -683,3 +683,23 @@ def test_capital_delta_parsed():
     raw = json.loads(load("basic.json"))
     raw.pop("capital_delta_30", None)
     assert StateDoc.from_payload(json.dumps(raw)).capital_delta_30 is None
+
+
+def test_idle_parsed():
+    """Простій — двома блоками: факт (idle) і ціна (idle_cost). Обидва
+    необовʼязкові й незалежні: простій без поради — законний стан."""
+    doc = StateDoc.from_payload(load("basic.json"))
+    assert doc.idle is not None
+    assert doc.idle.investable_uah == 12000
+    assert doc.idle.since == "2026-06-20"
+    assert doc.idle.days == 25
+    assert doc.idle_cost is not None
+    assert doc.idle_cost.cost_month_uah == 98.4
+    assert doc.idle_cost.rate_label == "UA4000227748"
+
+    raw = json.loads(load("basic.json"))
+    raw.pop("idle_cost", None)
+    only_fact = StateDoc.from_payload(json.dumps(raw))
+    assert only_fact.idle is not None and only_fact.idle_cost is None
+    raw.pop("idle", None)
+    assert StateDoc.from_payload(json.dumps(raw)).idle is None

@@ -128,6 +128,9 @@
       "capital_delta_30_uah": {
         "name": "Капітал за 30 днів"
       },
+      "idle_cost_month_uah": {
+        "name": "Простій грошей, на місяць"
+      },
       "debt_total_uah": {
         "name": "Борг під ставкою"
       },

@@ -217,6 +217,23 @@ def _delta_attrs(doc: StateDoc) -> dict[str, Any] | None:
     }
 
 
+def _idle_attrs(doc: StateDoc) -> dict[str, Any] | None:
+    """Скільки лежить і відколи — поруч із ціною: «−45 ₴/міс» без суми й
+    дати не каже, що з цим робити."""
+    i = doc.idle
+    if i is None:
+        return None
+    c = doc.idle_cost
+    return {
+        "investable_uah": i.investable_uah,
+        "since": i.since,
+        "days": i.days,
+        "cost_so_far_uah": c.cost_so_far_uah if c else None,
+        "rate_pct": c.rate_pct if c else None,
+        "rate_label": c.rate_label if c else "",
+    }
+
+
 def _debt_attrs(doc: StateDoc) -> dict[str, Any] | None:
     d = doc.debt
     if d is None:
@@ -568,6 +585,24 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         suggested_display_precision=0,
         value_fn=lambda d: d.capital_delta_30.delta_uah if d.capital_delta_30 else None,
         attrs_fn=_delta_attrs,
+    ),
+    # Простій: що коштує на місяць лежання вільних грошей понад квиток.
+    # Стан — ціна, а не сума: сума й так є в account_uah, а тут питання
+    # «скільки я втрачаю». Нуль — коли простій є (idle), а поради для цих
+    # грошей немає: лежати лежить, а ціни не з чого взяти; unknown — коли
+    # простою немає взагалі. Атрибути (сума, відколи) дають зрозуміти, який
+    # із випадків перед тобою.
+    OddInvestSensorDescription(
+        key="idle_cost_month_uah",
+        translation_key="idle_cost_month_uah",
+        native_unit_of_measurement="UAH",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        value_fn=lambda d: (
+            (d.idle_cost.cost_month_uah if d.idle_cost else 0.0) if d.idle else None
+        ),
+        attrs_fn=_idle_attrs,
     ),
     OddInvestSensorDescription(
         key="debt_total_uah",

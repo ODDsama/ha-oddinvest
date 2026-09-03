@@ -128,6 +128,9 @@
       "capital_delta_30_uah": {
         "name": "Capital, 30-day change"
       },
+      "idle_cost_month_uah": {
+        "name": "Idle cash cost, per month"
+      },
       "debt_total_uah": {
         "name": "Interest-bearing debt"
       },
