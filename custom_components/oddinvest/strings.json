@@ -3,12 +3,11 @@
     "step": {
       "user": {
         "title": "ODD Invest",
-        "description": "Адреса сервіса oddinvestd і префікс MQTT-топіків (має збігатися з ODDINVEST_MQTT_PREFIX). Токен і публічна адреса — лише якщо сервіс закритий паролем і виведений назовні.",
+        "description": "Адреса сервіса oddinvestd і префікс MQTT-топіків (має збігатися з ODDINVEST_MQTT_PREFIX). Токен — лише якщо сервіс закритий паролем; візьми його в застосунку.",
         "data": {
           "base_url": "Адреса REST (http://host:8080)",
           "topic_prefix": "Префікс MQTT-топіків",
-          "token": "Токен REST (ODDINVEST_AUTH_TOKEN), якщо сервіс закритий",
-          "public_url": "Публічна адреса для посилань (https://…), якщо є"
+          "token": "Токен REST — «Налаштування → Доступ ззовні» в застосунку"
         }
       },
       "reconfigure": {
@@ -17,8 +16,7 @@
         "data": {
           "base_url": "Адреса REST (http://host:8080)",
           "topic_prefix": "Префікс MQTT-топіків",
-          "token": "Токен REST (ODDINVEST_AUTH_TOKEN), якщо сервіс закритий",
-          "public_url": "Публічна адреса для посилань (https://…), якщо є"
+          "token": "Токен REST — «Налаштування → Доступ ззовні» в застосунку"
         }
       }
     },

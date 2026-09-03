@@ -685,6 +685,19 @@ def test_capital_delta_parsed():
     assert StateDoc.from_payload(json.dumps(raw)).capital_delta_30 is None
 
 
+def test_public_url_comes_from_document():
+    """Публічна адреса приходить документом, а не полем інтеграції: її
+    задає сам сервіс при підключенні тунелю."""
+    doc = StateDoc.from_payload(load("basic.json"))
+    assert doc.settings is not None
+    assert doc.settings.public_url == "https://oddinvest.example.com"
+
+    raw = json.loads(load("basic.json"))
+    raw["settings"].pop("public_url", None)
+    plain = StateDoc.from_payload(json.dumps(raw))
+    assert plain.settings is not None and plain.settings.public_url is None
+
+
 def test_idle_parsed():
     """Простій — двома блоками: факт (idle) і ціна (idle_cost). Обидва
     необовʼязкові й незалежні: простій без поради — законний стан."""

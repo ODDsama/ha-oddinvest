@@ -15,7 +15,6 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .const import (
     CONF_BASE_URL,
-    CONF_PUBLIC_URL,
     CONF_TOKEN,
     CONF_TOPIC_PREFIX,
     DOMAIN,
@@ -42,10 +41,8 @@ class OddInvestData:
     base_url: str
     prefix: str
     # token — Bearer для REST, коли на сервісі стоїть замок; порожньо =
-    # без заголовка. public_url — адреса для людини (посилання в
-    # сповіщеннях, картка пристрою); порожньо = base_url. Довід у const.py.
+    # без заголовка (сервіс без пароля). Довід у const.py.
     token: str = ""
-    public_url: str = ""
     state: StateDoc | None = None
     available: bool = False
     unsubscribers: list = field(default_factory=list)
@@ -53,8 +50,17 @@ class OddInvestData:
 
     @property
     def open_url(self) -> str:
-        """Звідки застосунок відкриває людина."""
-        return self.public_url or self.base_url
+        """Звідки застосунок відкриває ЛЮДИНА.
+
+        Публічна адреса приходить ДОКУМЕНТОМ (settings.public_url): її
+        задає сам сервіс, коли власник підключає тунель на сторінці
+        «Доступ ззовні». Питати ту саму адресу вдруге, полем інтеграції,
+        означало б два джерела однієї правди — і друге лишалось би старим
+        рівно тоді, коли адресу міняли. Немає тунелю — лишається локальна
+        адреса REST.
+        """
+        s = self.state.settings if self.state else None
+        return (s.public_url if s and s.public_url else "") or self.base_url
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: OddInvestConfigEntry) -> bool:
@@ -65,7 +71,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: OddInvestConfigEntry) ->
         base_url=entry.data[CONF_BASE_URL].rstrip("/"),
         prefix=entry.data[CONF_TOPIC_PREFIX],
         token=str(entry.data.get(CONF_TOKEN, "")),
-        public_url=str(entry.data.get(CONF_PUBLIC_URL, "")).rstrip("/"),
     )
     entry.runtime_data = data
 
@@ -143,8 +148,9 @@ async def _request(
         ) as resp:
             if resp.status == 401:
                 raise HomeAssistantError(
-                    "oddinvestd не приймає токен: сервіс закритий паролем, "
-                    "задай ODDINVEST_AUTH_TOKEN у переналаштуванні інтеграції"
+                    "oddinvestd не приймає токен: сервіс закритий паролем. "
+                    "Візьми токен у застосунку («Налаштування → Доступ ззовні») "
+                    "і встав його в «Переналаштувати» цієї інтеграції"
                 )
             if resp.status >= 400:
                 body = await resp.text()

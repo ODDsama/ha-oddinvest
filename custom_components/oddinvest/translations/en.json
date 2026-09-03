@@ -3,12 +3,11 @@
     "step": {
       "user": {
         "title": "ODD Invest",
-        "description": "Address of the oddinvestd service and MQTT topic prefix (must match ODDINVEST_MQTT_PREFIX). Token and public URL only if the service is password-protected and exposed externally.",
+        "description": "Address of the oddinvestd service and MQTT topic prefix (must match ODDINVEST_MQTT_PREFIX). Token only if the service is password-protected; get it in the app.",
         "data": {
           "base_url": "REST address (http://host:8080)",
           "topic_prefix": "MQTT topic prefix",
-          "token": "REST token (ODDINVEST_AUTH_TOKEN), if the service is locked",
-          "public_url": "Public URL for links (https://…), if any"
+          "token": "REST token — «Settings → Remote access» in the app"
         }
       },
       "reconfigure": {
@@ -17,8 +16,7 @@
         "data": {
           "base_url": "REST address (http://host:8080)",
           "topic_prefix": "MQTT topic prefix",
-          "token": "REST token (ODDINVEST_AUTH_TOKEN), if the service is locked",
-          "public_url": "Public URL for links (https://…), if any"
+          "token": "REST token — «Settings → Remote access» in the app"
         }
       }
     },

@@ -379,6 +379,12 @@ class Settings:
     # читалось ніким, а ставку проєкції давно дає portfolio_yield.
     goal_amount_uah: float | None = None
     goal_date: str | None = None
+    # public_url — адреса, з якої застосунок відкривається ЗЗОВНІ. Її
+    # задає сам сервіс, коли власник підключає тунель на сторінці «Доступ
+    # ззовні», і саме тому вона приходить документом, а не питається
+    # вдруге в майстрі інтеграції: два джерела однієї адреси розійшлися б
+    # мовчки, і розійшлися б саме тоді, коли адресу міняли.
+    public_url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -792,12 +798,14 @@ def _settings(raw: dict[str, Any] | None) -> Settings | None:
         return float(v) if v is not None else None
 
     gd = raw.get("goal_date")
+    pu = raw.get("public_url")
     return Settings(
         monthly_target_uah=num("monthly_target_uah"),
         usd_target_share_pct=num("usd_target_share_pct"),
         eur_target_share_pct=num("eur_target_share_pct"),
         goal_amount_uah=num("goal_amount_uah"),
         goal_date=str(gd) if gd else None,
+        public_url=str(pu) if pu else None,
     )
 
 

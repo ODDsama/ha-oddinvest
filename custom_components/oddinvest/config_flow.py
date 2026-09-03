@@ -19,7 +19,6 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     CONF_BASE_URL,
-    CONF_PUBLIC_URL,
     CONF_TOKEN,
     CONF_TOPIC_PREFIX,
     DEFAULT_PREFIX,
@@ -36,11 +35,11 @@ def _schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
         {
             vol.Required(CONF_BASE_URL, default=d.get(CONF_BASE_URL, "http://")): str,
             vol.Required(CONF_TOPIC_PREFIX, default=d.get(CONF_TOPIC_PREFIX, DEFAULT_PREFIX)): str,
-            # Обидва необовʼязкові й типово порожні: сервіс без замка
-            # працює як досі, і міграції запису не треба — читаються через
-            # entry.data.get(...).
+            # Необовʼязковий і типово порожній: сервіс без пароля працює
+            # як досі, і міграції запису не треба — читається через
+            # entry.data.get(...). Публічної адреси тут немає: її дає сам
+            # сервіс документом стану (const.py).
             vol.Optional(CONF_TOKEN, default=d.get(CONF_TOKEN, "")): str,
-            vol.Optional(CONF_PUBLIC_URL, default=d.get(CONF_PUBLIC_URL, "")): str,
         }
     )
 
@@ -50,7 +49,6 @@ def _normalize(user_input: dict[str, Any]) -> dict[str, str]:
         CONF_BASE_URL: user_input[CONF_BASE_URL].rstrip("/"),
         CONF_TOPIC_PREFIX: user_input[CONF_TOPIC_PREFIX].strip().strip("/"),
         CONF_TOKEN: str(user_input.get(CONF_TOKEN, "")).strip(),
-        CONF_PUBLIC_URL: str(user_input.get(CONF_PUBLIC_URL, "")).strip().rstrip("/"),
     }
 
 
