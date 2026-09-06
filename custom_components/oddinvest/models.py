@@ -17,7 +17,17 @@ from dataclasses import dataclass, field, fields
 from datetime import date, datetime, timedelta
 from typing import Any
 
-SUPPORTED_SCHEMA = 1
+# 2 (2026-09-07): із документа ЗНИКЛИ поля, а не додались.
+#
+# Контракт дозволяє лише додавання, тож видалення йде разом з інкрементом
+# мажорної версії — саме для того, щоб інтеграція побачила це явно, а не
+# дізналась із мовчазного нуля. Прибрані month_plan.plan_debt_uah і
+# settings.debt_fill_from: дострокове погашення боргу більше не забирає
+# портфельних грошей, тож числа «скільки з плану дозволено боргу» не буває.
+#
+# Читачів у цих полів тут не було (debt_uah у CardState — це використаний
+# ліміт КАРТКИ, інше поле), тож розбір нижче не змінився ніяк.
+SUPPORTED_SCHEMA = 2
 
 
 def _age_hours(stamp: str, now: datetime) -> float | None:

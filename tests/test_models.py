@@ -75,7 +75,7 @@ def test_tasks_absent_is_empty():
 
 def test_parse_basic_fixture():
     doc = StateDoc.from_payload(load("basic.json"))
-    assert doc.schema == 1
+    assert doc.schema == 2
     assert doc.invested_uah == 137305.57
     assert doc.nominal_uah_eq == 138246.8
     assert doc.month_progress_pct == 90
@@ -518,14 +518,22 @@ def test_unknown_fields_are_ignored():
     raw["brand_new_field"] = {"anything": 1}
     raw["next_payment"]["extra"] = True
     doc = StateDoc.from_payload(json.dumps(raw))
-    assert doc.schema == 1
+    assert doc.schema == 2
 
 
 def test_wrong_schema_rejected():
-    raw = json.loads(load("basic.json"))
-    raw["schema"] = 2
-    with pytest.raises(ContractError, match="schema=2"):
-        StateDoc.from_payload(json.dumps(raw))
+    """Чужа мажорна версія — відмова, і в ОБИДВА боки.
+
+    Число тут навмисно НЕ «на одиницю більше»: 3 стереже майбутнє, 1 —
+    минуле. Друге важливіше: після інкременту 1 → 2 стара публікація з
+    ретейненого топіка (а вона лежить у брокері, доки її не перезапишуть)
+    мусить бути відкинута, а не розібрана як нова.
+    """
+    for bad in (1, 3):
+        raw = json.loads(load("basic.json"))
+        raw["schema"] = bad
+        with pytest.raises(ContractError, match=f"schema={bad}"):
+            StateDoc.from_payload(json.dumps(raw))
 
 
 def test_missing_required_field_rejected():
