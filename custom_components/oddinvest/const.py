@@ -22,7 +22,12 @@ DEFAULT_PREFIX = "oddinvest"
 SIGNAL_STATE_UPDATED = f"{DOMAIN}_state_updated"
 SIGNAL_AVAILABILITY = f"{DOMAIN}_availability"
 
-SUPPORTED_SCHEMA = 1
+# SUPPORTED_SCHEMA тут НЕМАЄ навмисно — вона живе в models.py, поруч із
+# єдиним місцем, яке її звіряє (StateDoc.from_payload). Дубль стояв саме
+# тут і саме тут розійшовся: контракт пішов на 2, models.py оновили, а ця
+# константа лишилась одиницею. Не зламалось нічого лише тому, що імпортерів
+# у неї не було — тобто наступного разу могло б і зламатись, причому
+# мовчки: два означення однієї межі не сперечаються, вони розходяться.
 
 SERVICE_REFRESH = "refresh"
 SERVICE_MARK_PAYMENT = "mark_payment"
