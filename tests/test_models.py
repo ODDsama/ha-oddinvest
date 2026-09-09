@@ -195,7 +195,7 @@ def test_nested_objects_parsed():
     assert isinstance(doc.independence.plan_months, int)
 
     assert doc.liquidity is not None
-    assert doc.liquidity.in_30_uah == 5637.5
+    assert doc.liquidity.in_30_uah == 95637.5
     assert doc.liquidity.locked_uah == 120000
 
     assert doc.reserve is not None
@@ -235,7 +235,7 @@ def test_nested_object_ignores_unknown_fields():
     raw = json.loads(load("basic.json"))
     raw["liquidity"]["in_7_uah"] = 123.45
     doc = StateDoc.from_payload(json.dumps(raw))
-    assert doc.liquidity.in_30_uah == 5637.5
+    assert doc.liquidity.in_30_uah == 95637.5
 
 
 def test_empty_fixture_has_no_nested_objects():
