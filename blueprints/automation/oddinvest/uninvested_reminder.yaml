@@ -36,7 +36,8 @@ actions:
       title: "ODD Invest: час перевкласти"
       message: >-
         З виплат на рахунку
-        {{ state_attr(trigger.entity_id, 'uninvested_uah') | round(0) }} грн —
+        {{ state_attr(trigger.entity_id, 'uninvested_uah') | round(0) }}
+        {{ state_attr(trigger.entity_id, 'currency') or 'UAH' }} —
         вони не працюють. Купи щось у Дії.
 
 mode: single

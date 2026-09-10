@@ -164,7 +164,12 @@ class UninvestedCashSensor(OddInvestEntity, BinarySensorEntity):
     def extra_state_attributes(self):
         if self._data.state is None:
             return None
-        return {"uninvested_uah": self._data.state.uninvested_uah}
+        # currency — щоб сповіщення (blueprint uninvested_reminder) казало
+        # суму в тій валюті, у якій вона є, а не «грн» наосліп.
+        return {
+            "uninvested_uah": self._data.state.uninvested_uah,
+            "currency": self._data.state.currency,
+        }
 
 
 class NPFContributionDueSensor(OddInvestEntity, BinarySensorEntity):

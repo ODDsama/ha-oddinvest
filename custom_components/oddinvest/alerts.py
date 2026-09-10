@@ -189,7 +189,7 @@ class NotificationManager:
                 await self._send(
                     f"limit:{c.dimension}|{c.key}:{month}",
                     f"⚠ {c.label or c.key}: {c.share_pct:.0f}% при ліміті "
-                    f"{c.limit_pct:.0f}% (перебір {c.over_uah:,.0f} ₴).",
+                    f"{c.limit_pct:.0f}% (перебір {c.over_uah:,.0f} {st.currency_symbol()}).",
                 )
 
         # Аукціон Мінфіну як сигнал до реінвестиції.
@@ -242,8 +242,8 @@ class NotificationManager:
                 await self._send(
                     f"card:{c.name}:{c.due_date}:{c.days_to_due}",
                     f"💳 «{c.name}»: розрахункова дата {when} ({c.due_date}). "
-                    f"Принести {c.bring_by_due_uah:,.0f} ₴ — і відсотків не буде; "
-                    f"мінімум {c.min_due_uah:,.0f} ₴.",
+                    f"Принести {c.bring_by_due_uah:,.0f} {st.currency_symbol()} — "
+                    f"і відсотків не буде; мінімум {c.min_due_uah:,.0f} {st.currency_symbol()}.",
                     actions=[self._open("Борги", "plan/debts/main")],
                 )
 

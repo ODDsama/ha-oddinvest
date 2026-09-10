@@ -33,7 +33,18 @@ from typing import Any
 # лише тому, що імпортерів у дубля не було. Межа контракту звіряється в
 # одному місці (from_payload нижче), тож і число мусить бути одне —
 # наступний, кому знадобиться схема, імпортує звідси.
-SUPPORTED_SCHEMA = 2
+# 3 (2026-09-10): усі грошові поля документа — у валюті поля currency
+# (валюта звітності, settings.report_currency на сервісі): гривня, долар чи
+# євро. Суфікс _uah у назвах лишився історичним; сенс задає currency, і
+# саме звідти сенсори беруть одиницю. Поля лише для гривні (реальна
+# дохідність, ІСЦ, цілі «у майбутніх грошах») при валюті ≠ UAH можуть
+# бути порожніми.
+SUPPORTED_SCHEMA = 3
+
+# Книжкова валюта: у ній сервіс веде облік і в ній документ приходить, поки
+# валюти звітності не задано. Символи — для прози сповіщень.
+BOOK_CURRENCY = "UAH"
+CURRENCY_SYMBOL = {"UAH": "₴", "USD": "$", "EUR": "€"}
 
 
 def _age_hours(stamp: str, now: datetime) -> float | None:
@@ -527,10 +538,20 @@ class StateDoc:
     # бекенд старший за це поле. Розрізняти їх інтеграції нічим, та й
     # незачем: в обох випадках правильна відповідь одна — нуль задач.
     tasks: tuple[Task, ...] = field(default_factory=tuple)
+    # currency — валюта, у якій показані ВСІ суми документа (schema 3).
+    # Обов'язкове: сенсор із грошима без одиниці брехав би мовчки.
+    # currency_note — чому показано не те, що просили (курсу ще немає).
+    currency: str = BOOK_CURRENCY
+    currency_note: str = ""
+
+    def currency_symbol(self) -> str:
+        """Символ валюти документа для прози сповіщень: ₴, $ чи €."""
+        return CURRENCY_SYMBOL.get(self.currency, self.currency)
 
     REQUIRED = (
         "schema",
         "generated_at",
+        "currency",
         "invested_uah",
         "nominal_uah_eq",
         "usd_share_pct",
@@ -683,6 +704,8 @@ class StateDoc:
             next_payment=np,
             eur_share_pct=float(raw.get("eur_share_pct", 0.0)),
             account_uah=float(raw.get("account_uah", 0.0)),
+            currency=str(raw["currency"]),
+            currency_note=str(raw.get("currency_note", "")),
             funds_uah=float(raw.get("funds_uah", 0.0)),
             deposits_uah=float(raw.get("deposits_uah", 0.0)),
             reserve_uah=float(raw.get("reserve_uah", 0.0)),

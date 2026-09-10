@@ -692,6 +692,23 @@ class OddInvestSensor(OddInvestEntity, SensorEntity):
             return None
         return self.entity_description.value_fn(self._data.state)
 
+    # Одиниця грошових сенсорів — валюта ДОКУМЕНТА, не опис сенсора.
+    #
+    # Опис каже «UAH» лише тому, що облік ведеться в гривні; відколи
+    # сервіс показує документ у валюті звітності (schema 3), кожна сума в
+    # ньому — у doc.currency, і сенсор мусить казати ту саму одиницю.
+    # Інакше 1 104 $ читались би як 1 104 ₴ — найгірший вид помилки, бо
+    # число правдоподібне. Ціна для recorder-а: зміна одиниці MONETARY/TOTAL
+    # сенсора зупиняє довгострокову статистику, доки нову одиницю не
+    # підтвердити в «Налаштування → Статистика»; старі точки лишаються
+    # гривневими числами під новою одиницею — HA валют не перераховує.
+    @property
+    def native_unit_of_measurement(self):
+        unit = self.entity_description.native_unit_of_measurement
+        if unit == "UAH" and self._data.state is not None and self._data.state.currency:
+            return self._data.state.currency
+        return unit
+
     @property
     def extra_state_attributes(self):
         if self._data.state is None or self.entity_description.attrs_fn is None:

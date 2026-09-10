@@ -75,7 +75,7 @@ def test_tasks_absent_is_empty():
 
 def test_parse_basic_fixture():
     doc = StateDoc.from_payload(load("basic.json"))
-    assert doc.schema == 2
+    assert doc.schema == 3
     assert doc.invested_uah == 137305.57
     assert doc.nominal_uah_eq == 138246.8
     assert doc.month_progress_pct == 90
@@ -518,18 +518,19 @@ def test_unknown_fields_are_ignored():
     raw["brand_new_field"] = {"anything": 1}
     raw["next_payment"]["extra"] = True
     doc = StateDoc.from_payload(json.dumps(raw))
-    assert doc.schema == 2
+    assert doc.schema == 3
 
 
 def test_wrong_schema_rejected():
     """Чужа мажорна версія — відмова, і в ОБИДВА боки.
 
-    Число тут навмисно НЕ «на одиницю більше»: 3 стереже майбутнє, 1 —
-    минуле. Друге важливіше: після інкременту 1 → 2 стара публікація з
+    Число тут навмисно НЕ «на одиницю більше»: 4 стереже майбутнє, 2 —
+    минуле. Друге важливіше: після інкременту 2 → 3 стара публікація з
     ретейненого топіка (а вона лежить у брокері, доки її не перезапишуть)
-    мусить бути відкинута, а не розібрана як нова.
+    мусить бути відкинута, а не розібрана як нова — її суми гривневі, а
+    одиницю сенсор бере з currency, і читати їх як долари не можна.
     """
-    for bad in (1, 3):
+    for bad in (2, 4):
         raw = json.loads(load("basic.json"))
         raw["schema"] = bad
         with pytest.raises(ContractError, match=f"schema={bad}"):
@@ -540,6 +541,28 @@ def test_missing_required_field_rejected():
     raw = json.loads(load("basic.json"))
     del raw["invested_uah"]
     with pytest.raises(ContractError, match="invested_uah"):
+        StateDoc.from_payload(json.dumps(raw))
+
+
+def test_currency_is_the_unit_of_every_sum():
+    """Валюта документа (schema 3): суми в ній, символ — для прози.
+
+    Обов'язкове поле: сенсор із грошима без одиниці брехав би мовчки —
+    1 104 $ читались би як 1 104 ₴.
+    """
+    raw = json.loads(load("basic.json"))
+    doc = StateDoc.from_payload(json.dumps(raw))
+    assert doc.currency == "UAH"
+    assert doc.currency_symbol() == "₴"
+    assert doc.currency_note == ""
+
+    raw["currency"], raw["currency_note"] = "USD", ""
+    usd = StateDoc.from_payload(json.dumps(raw))
+    assert usd.currency == "USD"
+    assert usd.currency_symbol() == "$"
+
+    del raw["currency"]
+    with pytest.raises(ContractError, match="currency"):
         StateDoc.from_payload(json.dumps(raw))
 
 
