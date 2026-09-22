@@ -19,12 +19,14 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     CONF_BASE_URL,
+    CONF_PORTFOLIO,
     CONF_TOKEN,
     CONF_TOPIC_PREFIX,
     DEFAULT_PREFIX,
     DOMAIN,
 )
 from .models import ContractError, StateDoc
+from .rest import rest_headers
 
 
 def _schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
@@ -40,6 +42,8 @@ def _schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             # entry.data.get(...). Публічної адреси тут немає: її дає сам
             # сервіс документом стану (const.py).
             vol.Optional(CONF_TOKEN, default=d.get(CONF_TOKEN, "")): str,
+            # Порожньо = головний портфель (довід у const.py).
+            vol.Optional(CONF_PORTFOLIO, default=d.get(CONF_PORTFOLIO, "")): str,
         }
     )
 
@@ -49,6 +53,7 @@ def _normalize(user_input: dict[str, Any]) -> dict[str, str]:
         CONF_BASE_URL: user_input[CONF_BASE_URL].rstrip("/"),
         CONF_TOPIC_PREFIX: user_input[CONF_TOPIC_PREFIX].strip().strip("/"),
         CONF_TOKEN: str(user_input.get(CONF_TOKEN, "")).strip(),
+        CONF_PORTFOLIO: str(user_input.get(CONF_PORTFOLIO, "")).strip(),
     }
 
 
@@ -56,7 +61,7 @@ async def _probe(hass, data: dict[str, str]) -> str | None:
     """Чи відповідає сервіс за base_url і чи наш у нього контракт.
     Повертає ключ помилки або None."""
     session = async_get_clientsession(hass)
-    headers = {"Authorization": f"Bearer {data[CONF_TOKEN]}"} if data[CONF_TOKEN] else {}
+    headers = rest_headers(data[CONF_TOKEN], data[CONF_PORTFOLIO])
     try:
         async with session.get(
             f"{data[CONF_BASE_URL]}/api/summary",
@@ -68,6 +73,10 @@ async def _probe(hass, data: dict[str, str]) -> str | None:
             # адресу».
             if resp.status == 401:
                 return "invalid_auth"
+            # Невідомий slug сервіс віддає 404 (і лише після замка) —
+            # окремою помилкою, бо «не зʼєднались» тут вело б не туди.
+            if resp.status == 404 and data[CONF_PORTFOLIO]:
+                return "unknown_portfolio"
             if resp.status != 200:
                 return "cannot_connect"
             StateDoc.from_payload(await resp.text())

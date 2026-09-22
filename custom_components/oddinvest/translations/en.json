@@ -3,11 +3,12 @@
     "step": {
       "user": {
         "title": "ODD Invest",
-        "description": "Address of the oddinvestd service and MQTT topic prefix (must match ODDINVEST_MQTT_PREFIX). Token only if the service is password-protected; get it in the app.",
+        "description": "Address of the oddinvestd service and MQTT topic prefix (must match ODDINVEST_MQTT_PREFIX). Token only if the service is password-protected; get it in the app. Portfolio — only for a non-main one: the same slug as at the end of the prefix.",
         "data": {
           "base_url": "REST address (http://host:8080)",
           "topic_prefix": "MQTT topic prefix",
-          "token": "REST token — «Settings → Remote access» in the app"
+          "token": "REST token — «Settings → Remote access» in the app",
+          "portfolio": "Portfolio (slug) — empty for the main one"
         }
       },
       "reconfigure": {
@@ -16,14 +17,16 @@
         "data": {
           "base_url": "REST address (http://host:8080)",
           "topic_prefix": "MQTT topic prefix",
-          "token": "REST token — «Settings → Remote access» in the app"
+          "token": "REST token — «Settings → Remote access» in the app",
+          "portfolio": "Portfolio (slug) — empty for the main one"
         }
       }
     },
     "error": {
       "cannot_connect": "Failed to connect to oddinvestd",
       "invalid_auth": "oddinvestd is password-protected and rejects this token (ODDINVEST_AUTH_TOKEN)",
-      "bad_contract": "Service responded but the state document violates the contract (version mismatch?)"
+      "bad_contract": "Service responded but the state document violates the contract (version mismatch?)",
+      "unknown_portfolio": "The service has no portfolio with this slug"
     },
     "abort": {
       "already_configured": "This prefix is already configured",

@@ -17,6 +17,13 @@ CONF_TOPIC_PREFIX = "topic_prefix"
 # машина не пройде.
 CONF_TOKEN = "token"
 
+# CONF_PORTFOLIO — slug портфеля, коли запис дивиться НЕ на головний
+# (MQTT-префікс «<prefix>/<slug>»). Порожньо = головний: так поводились усі
+# записи доти, і міграції не треба — читається через entry.data.get(...).
+# Сервіс розрізняє портфелі заголовком X-Portfolio (rest.py); без нього дії
+# («Отримано», «Оновити») з запису другого портфеля міняли б головний.
+CONF_PORTFOLIO = "portfolio"
+
 DEFAULT_PREFIX = "oddinvest"
 
 SIGNAL_STATE_UPDATED = f"{DOMAIN}_state_updated"

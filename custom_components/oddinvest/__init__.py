@@ -15,6 +15,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .const import (
     CONF_BASE_URL,
+    CONF_PORTFOLIO,
     CONF_TOKEN,
     CONF_TOPIC_PREFIX,
     DOMAIN,
@@ -26,6 +27,7 @@ from .const import (
 from .actions import parse_received
 from .alerts import NotificationManager
 from .models import ContractError, StateDoc
+from .rest import rest_headers
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -43,6 +45,9 @@ class OddInvestData:
     # token — Bearer для REST, коли на сервісі стоїть замок; порожньо =
     # без заголовка (сервіс без пароля). Довід у const.py.
     token: str = ""
+    # portfolio — slug НЕ головного портфеля; порожньо = головний. Довід —
+    # у const.py (CONF_PORTFOLIO).
+    portfolio: str = ""
     state: StateDoc | None = None
     available: bool = False
     unsubscribers: list = field(default_factory=list)
@@ -71,6 +76,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: OddInvestConfigEntry) ->
         base_url=entry.data[CONF_BASE_URL].rstrip("/"),
         prefix=entry.data[CONF_TOPIC_PREFIX],
         token=str(entry.data.get(CONF_TOKEN, "")),
+        portfolio=str(entry.data.get(CONF_PORTFOLIO, "")),
     )
     entry.runtime_data = data
 
@@ -137,7 +143,7 @@ async def _request(
     паролем, а інтеграцію не переналаштували)."""
     session = async_get_clientsession(hass)
     url = data.base_url + path
-    headers = {"Authorization": f"Bearer {data.token}"} if data.token else {}
+    headers = rest_headers(data.token, data.portfolio)
     try:
         async with session.request(
             method,
