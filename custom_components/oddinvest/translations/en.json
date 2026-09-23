@@ -221,5 +221,11 @@
         }
       }
     }
+  },
+  "issues": {
+    "unsupported_schema": {
+      "title": "Service and integration speak different contract versions",
+      "description": "oddinvestd sends state document version {got}, but this integration understands {want}. Sensors are frozen at their last value. Update whichever side is behind — the integration via HACS or the service — and this issue clears itself with the first understood document."
+    }
   }
 }

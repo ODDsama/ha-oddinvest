@@ -10,6 +10,7 @@ from homeassistant.components import mqtt
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
@@ -26,7 +27,7 @@ from .const import (
 )
 from .actions import parse_received
 from .alerts import NotificationManager
-from .models import ContractError, StateDoc
+from .models import ContractError, SchemaMismatch, StateDoc
 from .rest import rest_headers
 
 _LOGGER = logging.getLogger(__name__)
@@ -80,13 +81,37 @@ async def async_setup_entry(hass: HomeAssistant, entry: OddInvestConfigEntry) ->
     )
     entry.runtime_data = data
 
+    issue_id = f"unsupported_schema_{entry.entry_id}"
+
     @callback
     def state_received(msg: mqtt.ReceiveMessage) -> None:
+        # Порожній retained — сервіс стер стан видаленого портфеля
+        # (mqtt.Publisher.Retire). Це не поломка контракту, а кінець
+        # портфеля: сутності лишаються недоступними, лог не засмічується.
+        if not msg.payload:
+            _LOGGER.info("Стан %s стерто сервісом — портфель видалено?", msg.topic)
+            return
         try:
             data.state = StateDoc.from_payload(msg.payload)
+        except SchemaMismatch as err:
+            # У «Ремонти», а не лише в журнал: сутності від цього мовчки
+            # замерзають на останньому значенні, і шукати причину в лозі —
+            # останнє, що людина здогадається зробити.
+            ir.async_create_issue(
+                hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key="unsupported_schema",
+                translation_placeholders={"got": str(err.got), "want": str(err.want)},
+            )
+            _LOGGER.error("Повідомлення %s не відповідає контракту: %s", msg.topic, err)
+            return
         except ContractError as err:
             _LOGGER.error("Повідомлення %s не відповідає контракту: %s", msg.topic, err)
             return
+        ir.async_delete_issue(hass, DOMAIN, issue_id)
         async_dispatcher_send(hass, SIGNAL_STATE_UPDATED)
 
     @callback

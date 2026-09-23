@@ -747,3 +747,15 @@ def test_idle_parsed():
     assert only_fact.idle is not None and only_fact.idle_cost is None
     raw.pop("idle", None)
     assert StateDoc.from_payload(json.dumps(raw)).idle is None
+
+
+def test_schema_mismatch_carries_versions_for_repairs():
+    """Несумісна версія — окремий тип із версіями: з нього __init__ робить
+    запис у «Ремонтах», а не лише рядок у журналі."""
+    raw = json.loads(load("basic.json"))
+    raw["schema"] = models.SUPPORTED_SCHEMA + 1
+    with pytest.raises(models.SchemaMismatch) as exc:
+        StateDoc.from_payload(json.dumps(raw))
+    assert exc.value.got == models.SUPPORTED_SCHEMA + 1
+    assert exc.value.want == models.SUPPORTED_SCHEMA
+    assert isinstance(exc.value, ContractError)

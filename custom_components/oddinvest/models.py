@@ -69,6 +69,21 @@ class ContractError(ValueError):
     """Документ стану не відповідає контракту."""
 
 
+class SchemaMismatch(ContractError):
+    """Сервіс говорить іншою версією контракту.
+
+    Окремий тип, бо лікується інакше за будь-яку іншу поломку документа:
+    не правкою даних, а оновленням одного з двох боків. __init__ перетворює
+    його на запис у «Ремонтах» Home Assistant — інакше сутності мовчки
+    замерзали на останньому значенні, а причина жила рядком у журналі.
+    """
+
+    def __init__(self, got: object, want: int) -> None:
+        super().__init__(f"непідтримувана версія контракту schema={got}, інтеграція розуміє {want}")
+        self.got = got
+        self.want = want
+
+
 @dataclass(frozen=True)
 class NextPayment:
     date: str
@@ -673,10 +688,7 @@ class StateDoc:
 
         schema = raw["schema"]
         if schema != SUPPORTED_SCHEMA:
-            raise ContractError(
-                f"непідтримувана версія контракту schema={schema}, "
-                f"інтеграція розуміє {SUPPORTED_SCHEMA}"
-            )
+            raise SchemaMismatch(schema, SUPPORTED_SCHEMA)
 
         np = None
         if raw.get("next_payment"):
