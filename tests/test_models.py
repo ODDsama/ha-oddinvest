@@ -759,3 +759,21 @@ def test_schema_mismatch_carries_versions_for_repairs():
     assert exc.value.got == models.SUPPORTED_SCHEMA + 1
     assert exc.value.want == models.SUPPORTED_SCHEMA
     assert isinstance(exc.value, ContractError)
+
+
+def test_malformed_field_is_contract_error():
+    """Поле не того вигляду — ContractError із назвою причини, а не
+    TypeError/KeyError повз обробник оновлення."""
+    cases = []
+    raw = json.loads(load("basic.json"))
+    raw["ladder"] = [{"year": "не рік"}]
+    cases.append(raw)
+    raw = json.loads(load("basic.json"))
+    raw["top_payments"] = [None]
+    cases.append(raw)
+    raw = json.loads(load("basic.json"))
+    raw["invested_uah"] = {"не": "число"}
+    cases.append(raw)
+    for bad in cases:
+        with pytest.raises(ContractError, match="поле не того вигляду"):
+            StateDoc.from_payload(json.dumps(bad))

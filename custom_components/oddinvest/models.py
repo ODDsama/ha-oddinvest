@@ -690,6 +690,21 @@ class StateDoc:
         if schema != SUPPORTED_SCHEMA:
             raise SchemaMismatch(schema, SUPPORTED_SCHEMA)
 
+        # Будь-яке поле не того вигляду (рядок замість числа, null замість
+        # обʼєкта, відсутній ключ у вкладеному рядку) — теж порушення
+        # контракту, а не падіння інтеграції. Доти TypeError/KeyError звідси
+        # летіли повз ContractError: оновлення стану тихо зупинялось зі
+        # стеком у журналі, а config_flow показував «невідома помилка»
+        # замість «сервіс віддає не той документ».
+        try:
+            return cls._build(raw, schema)
+        except ContractError:
+            raise
+        except (TypeError, KeyError, ValueError, AttributeError) as err:
+            raise ContractError(f"поле не того вигляду: {type(err).__name__}: {err}") from err
+
+    @classmethod
+    def _build(cls, raw: dict[str, Any], schema: Any) -> "StateDoc":
         np = None
         if raw.get("next_payment"):
             p = raw["next_payment"]
