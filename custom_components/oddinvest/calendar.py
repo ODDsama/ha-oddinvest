@@ -7,10 +7,12 @@ from datetime import date, datetime, timedelta
 from homeassistant.components.calendar import CalendarEntity, CalendarEvent
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util import dt as dt_util
 
 from . import OddInvestConfigEntry
 from .entity import OddInvestEntity
 from .models import PaymentRow
+from .rules import day_overlaps
 
 TYPE_NAMES = {"coupon": "Купон", "redemption": "Погашення", "early": "Дострокове погашення"}
 
@@ -47,7 +49,7 @@ class OddInvestCalendar(OddInvestEntity, CalendarEntity):
         """Найближча виплата."""
         if self._data.state is None or not self._data.state.calendar:
             return None
-        today = date.today().isoformat()
+        today = dt_util.now().date().isoformat()
         for row in self._data.state.calendar:
             if row.date >= today:
                 return _to_event(row)
@@ -58,9 +60,11 @@ class OddInvestCalendar(OddInvestEntity, CalendarEntity):
     ) -> list[CalendarEvent]:
         if self._data.state is None:
             return []
-        lo, hi = start_date.date(), end_date.date()
+        # Перетин інтервалів у МІСЦЕВОМУ часі (rules.day_overlaps): подія
+        # дня — доба за місцевим годинником.
+        start, end = dt_util.as_local(start_date), dt_util.as_local(end_date)
         return [
             _to_event(row)
             for row in self._data.state.calendar
-            if lo <= date.fromisoformat(row.date) < hi
+            if day_overlaps(date.fromisoformat(row.date), start, end)
         ]
