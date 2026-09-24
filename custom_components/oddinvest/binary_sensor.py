@@ -6,8 +6,11 @@ from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
 )
-from homeassistant.core import HomeAssistant
+from datetime import timedelta
+
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.util import dt as dt_util
 
 from . import OddInvestConfigEntry
@@ -235,6 +238,23 @@ class DataStaleSensor(OddInvestEntity, BinarySensorEntity):
     def __init__(self, data, entry_id: str) -> None:
         super().__init__(data, entry_id)
         self._attr_unique_id = f"{entry_id}_data_stale"
+
+    async def async_added_to_hass(self) -> None:
+        """Переоцінка за ГОДИННИКОМ, а не лише за новим документом.
+
+        Вік рахується від «зараз», але стан HA переписувався тільки на
+        MQTT-оновлення. Тобто саме та тиша, яку сенсор мав ловити, його й
+        заморожувала: сервіс замовк — і сенсор назавжди лишався «ок». Раз на
+        15 хвилин — досить для порогу в години і не шумить у журналі.
+        """
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_track_time_interval(self.hass, self._tick, timedelta(minutes=15))
+        )
+
+    @callback
+    def _tick(self, _now) -> None:
+        self.async_write_ha_state()
 
     def _ages(self):
         st = self._data.state
