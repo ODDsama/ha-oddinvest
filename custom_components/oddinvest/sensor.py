@@ -507,9 +507,13 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         key="income_monthly_now",
         translation_key="income_monthly_now",
         native_unit_of_measurement="UAH",
-        device_class=SensorDeviceClass.MONETARY,
         # MEASUREMENT, не TOTAL: це ТЕМП (₴ на місяць), а не накопичена
         # сума. TOTAL змусив би HA рахувати з нього приріст.
+        #
+        # І тому БЕЗ device_class MONETARY — у всіх таких сенсорів тут (темп,
+        # пилка накопиченого купона, ліквідність, дельта, простій, «принести
+        # до дати»): HA допускає для MONETARY лише TOTAL і на MEASUREMENT
+        # пише попередження в журнал на кожен старт. Одиниця UAH лишається.
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
         value_fn=lambda d: d.income_monthly_now,
@@ -518,7 +522,6 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         key="accrued_uah",
         translation_key="accrued_uah",
         native_unit_of_measurement="UAH",
-        device_class=SensorDeviceClass.MONETARY,
         # Єдина величина, що росте ПЛАВНО між виплатами і падає в нуль на
         # виплаті — тобто пилка, а не монотонний підсумок.
         state_class=SensorStateClass.MEASUREMENT,
@@ -545,7 +548,6 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         key="liquidity_in_30_uah",
         translation_key="liquidity_in_30_uah",
         native_unit_of_measurement="UAH",
-        device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
         value_fn=lambda d: d.liquidity.in_30_uah if d.liquidity else None,
@@ -580,7 +582,6 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         key="capital_delta_30_uah",
         translation_key="capital_delta_30_uah",
         native_unit_of_measurement="UAH",
-        device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
         value_fn=lambda d: d.capital_delta_30.delta_uah if d.capital_delta_30 else None,
@@ -596,7 +597,6 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         key="idle_cost_month_uah",
         translation_key="idle_cost_month_uah",
         native_unit_of_measurement="UAH",
-        device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
         value_fn=lambda d: (
@@ -620,7 +620,6 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         key="card_bring_by_due_uah",
         translation_key="card_bring_by_due_uah",
         native_unit_of_measurement="UAH",
-        device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
         value_fn=_card_bring,
