@@ -201,12 +201,22 @@
   "services": {
     "refresh": {
       "name": "Refresh data",
-      "description": "Refresh the NBU directory and FX rate on the service side, republish state."
+      "description": "Refresh the NBU directory and FX rate on the service side, republish state.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Portfolio",
+          "description": "Integration entry. Empty — the only one; required when there are several."
+        }
+      }
     },
     "mark_payment": {
       "name": "Mark payment",
       "description": "Mark a payout as received, or clear the mark.",
       "fields": {
+        "config_entry_id": {
+          "name": "Portfolio",
+          "description": "Integration entry. Empty — the only one; required when there are several."
+        },
         "isin": {
           "name": "ISIN",
           "description": "Security code."

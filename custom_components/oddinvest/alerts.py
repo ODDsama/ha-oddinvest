@@ -136,7 +136,10 @@ class NotificationManager:
                         f"coupon:{p.isin}:{today_s}",
                         f"📥 Сьогодні виплата: {p.amount:,.0f} {p.currency} по {p.title()}.",
                         actions=[
-                            {"action": received_action(p.isin, p.date), "title": "Отримано"},
+                            {
+                                "action": received_action(p.isin, p.date, self._entry.entry_id),
+                                "title": "Отримано",
+                            },
                             self._open("Відкрити", "work/todo/main"),
                         ],
                     )

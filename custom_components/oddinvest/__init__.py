@@ -9,7 +9,11 @@ import aiohttp
 from homeassistant.components import mqtt
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
-from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
+from homeassistant.exceptions import (
+    ConfigEntryNotReady,
+    HomeAssistantError,
+    ServiceValidationError,
+)
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.dispatcher import async_dispatcher_send
@@ -25,7 +29,7 @@ from .const import (
     SIGNAL_AVAILABILITY,
     SIGNAL_STATE_UPDATED,
 )
-from .actions import parse_received
+from .actions import parse_received, pick_targets
 from .alerts import NotificationManager
 from .models import ContractError, SchemaMismatch, StateDoc
 from .rest import rest_headers
@@ -205,13 +209,29 @@ def _loaded_entries(hass: HomeAssistant) -> list[OddInvestConfigEntry]:
     ]
 
 
+def _targets(hass: HomeAssistant, wanted: str) -> list[OddInvestConfigEntry]:
+    """Записи, які виконують дію сервісу: названий або єдиний.
+
+    Доти дія йшла в УСІ завантажені записи: з двома портфелями mark_payment
+    ставив «отримано» й туди, де цієї виплати немає. Правило — у
+    actions.pick_targets (тестується без HA); тут лише переклад помилки в
+    ту, яку HA покаже людині біля виклику.
+    """
+    loaded = {e.entry_id: e for e in _loaded_entries(hass)}
+    try:
+        ids = pick_targets(list(loaded), wanted)
+    except ValueError as err:
+        raise ServiceValidationError(str(err)) from err
+    return [loaded[i] for i in ids]
+
+
 def _register_services(hass: HomeAssistant) -> None:
     if hass.services.has_service(DOMAIN, SERVICE_REFRESH):
         return
 
     async def handle_refresh(call: ServiceCall) -> None:
         """oddinvest.refresh — оновити довідник НБУ і курс на боці сервіса."""
-        for entry in _loaded_entries(hass):
+        for entry in _targets(hass, str(call.data.get("config_entry_id", ""))):
             await async_refresh_service(hass, entry.runtime_data)
 
     async def handle_mark_payment(call: ServiceCall) -> None:
@@ -228,7 +248,7 @@ def _register_services(hass: HomeAssistant) -> None:
             "pay_date": str(call.data["pay_date"]),
             "status": call.data["status"],
         }
-        for entry in _loaded_entries(hass):
+        for entry in _targets(hass, str(call.data.get("config_entry_id", ""))):
             await _request(
                 hass,
                 entry.runtime_data,
@@ -253,9 +273,15 @@ def _register_services(hass: HomeAssistant) -> None:
         parsed = parse_received(str(event.data.get("action", "")))
         if parsed is None:
             return
-        isin, pay_date = parsed
+        entry_id, isin, pay_date = parsed
         body = {"isin": isin, "pay_date": pay_date, "status": "received"}
-        for entry in _loaded_entries(hass):
+        # Кнопка несе свій запис — і йде лише в нього. Кнопка старого
+        # формату (без запису) вже лежить на телефонах: вона, як і доти,
+        # іде в усі записи — інакше натискання мовчки не робило б нічого.
+        entries = _loaded_entries(hass)
+        if entry_id:
+            entries = [e for e in entries if e.entry_id == entry_id]
+        for entry in entries:
             try:
                 await _request(
                     hass,

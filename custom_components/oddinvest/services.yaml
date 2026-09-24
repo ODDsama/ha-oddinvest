@@ -3,6 +3,14 @@ refresh:
   description: >-
     Оновити довідник паперів НБУ і курс валют на боці сервіса oddinvestd,
     зробити знімок і републікувати стан у MQTT.
+  fields:
+    config_entry_id:
+      # Який портфель. Порожньо — єдиний запис; із кількома записами без
+      # нього сервіс відмовляє, а не розсилає дію всім.
+      required: false
+      selector:
+        config_entry:
+          integration: oddinvest
 
 mark_payment:
   name: Позначити виплату
@@ -10,6 +18,11 @@ mark_payment:
     Позначити виплату отриманою — тобто покласти гроші на рахунок, не
     чекаючи опівночі, — або зняти позначку.
   fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: oddinvest
     isin:
       name: ISIN
       description: Код паперу.
