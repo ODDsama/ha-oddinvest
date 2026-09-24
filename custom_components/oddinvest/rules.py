@@ -42,6 +42,20 @@ def payment_key(prefix: str, isin: str, pay_type: str, pay_date: str) -> str:
     return f"{prefix}:{isin}:{pay_type}:{pay_date}"
 
 
+def prefix_matches_portfolio(prefix: str, portfolio: str) -> bool:
+    """Чи дивиться MQTT-префікс на той самий портфель, що й slug для REST.
+
+    Сервіс публікує сателіт під «<prefix>/<slug>» (oddinvestd, main.go), а
+    дії шле за X-Portfolio: slug. Запис, де вони розійшлись, показував би
+    сенсори одного портфеля, а «Отримано» й «Оновити» відправляв би в
+    інший. Порожній slug тут не перевіряється: головний префікс законно
+    буває з «/» усередині, і відрізнити його від сателіта нема за чим.
+    """
+    if not portfolio:
+        return True
+    return prefix.endswith("/" + portfolio)
+
+
 def day_overlaps(day: date, start: datetime, end: datetime) -> bool:
     """Чи перетинає вікно [start, end) цілодобову подію дня day.
 

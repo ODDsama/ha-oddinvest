@@ -53,3 +53,12 @@ def test_day_overlaps_in_local_time():
     start, end = start_utc.astimezone(KYIV), end_utc.astimezone(KYIV)
     assert rules.day_overlaps(date(2026, 9, 24), start, end)
     assert not rules.day_overlaps(date(2026, 9, 25), start, end)
+
+
+def test_prefix_matches_portfolio():
+    """Сенсори й дії — про той самий портфель."""
+    assert rules.prefix_matches_portfolio("oddinvest", "")
+    assert rules.prefix_matches_portfolio("home/oddinvest", "")
+    assert rules.prefix_matches_portfolio("oddinvest/wife", "wife")
+    assert not rules.prefix_matches_portfolio("oddinvest", "wife")
+    assert not rules.prefix_matches_portfolio("oddinvest/son", "wife")

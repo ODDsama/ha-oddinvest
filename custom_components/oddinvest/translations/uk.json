@@ -26,7 +26,8 @@
       "cannot_connect": "Не вдалося під'єднатися до oddinvestd",
       "invalid_auth": "oddinvestd закритий паролем і не приймає цей токен (ODDINVEST_AUTH_TOKEN)",
       "bad_contract": "Сервіс відповів, але документ стану не відповідає контракту (несумісні версії?)",
-      "unknown_portfolio": "Сервіс не знає портфеля з таким slug"
+      "unknown_portfolio": "Сервіс не знає портфеля з таким slug",
+      "prefix_mismatch": "Префікс MQTT не відповідає портфелю: для портфеля зі slug він мусить закінчуватись на «/<slug>» — так сервіс публікує сателіти"
     },
     "abort": {
       "already_configured": "Цей префікс уже налаштовано",

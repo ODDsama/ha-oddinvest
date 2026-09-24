@@ -27,6 +27,7 @@ from .const import (
 )
 from .models import ContractError, StateDoc
 from .rest import rest_headers
+from .rules import prefix_matches_portfolio
 
 
 def _schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
@@ -60,6 +61,9 @@ def _normalize(user_input: dict[str, Any]) -> dict[str, str]:
 async def _probe(hass, data: dict[str, str]) -> str | None:
     """Чи відповідає сервіс за base_url і чи наш у нього контракт.
     Повертає ключ помилки або None."""
+    # Префікс і портфель — ДО мережі: розбіжність видно з самих полів.
+    if not prefix_matches_portfolio(data[CONF_TOPIC_PREFIX], data[CONF_PORTFOLIO]):
+        return "prefix_mismatch"
     session = async_get_clientsession(hass)
     headers = rest_headers(data[CONF_TOKEN], data[CONF_PORTFOLIO])
     try:
