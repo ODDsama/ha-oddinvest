@@ -7,9 +7,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import calendar as _cal
 import logging
-from datetime import date, timedelta
+from datetime import timedelta
 from typing import Any
 
 from homeassistant.core import HomeAssistant, callback
@@ -20,6 +21,7 @@ from homeassistant.util import dt as dt_util
 
 from .actions import received_action, uri_action
 from .const import CARD_MARK_STALE_DAYS, DOMAIN, SIGNAL_STATE_UPDATED, STALE_AFTER_H
+from .rules import already_sent, payment_key, prune_sent
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -59,6 +61,10 @@ class NotificationManager:
         # Дата найсвіжішого аукціону, про який уже сповіщали.
         self._last_auction: str = ""
         self._unsubs: list = []
+        # Оцінки йдуть по одній. Їх запускають і MQTT-апдейт, і добовий
+        # таймер, і дві паралельні бачили той самий журнал до запису —
+        # обидві слали те саме повідомлення.
+        self._lock = asyncio.Lock()
 
     async def async_setup(self) -> None:
         if not self._service:
@@ -102,26 +108,37 @@ class NotificationManager:
         self._hass.async_create_task(self._evaluate())
 
     async def _evaluate(self) -> None:
+        async with self._lock:
+            await self._evaluate_locked()
+
+    async def _evaluate_locked(self) -> None:
         if not self._service:
             return
         st = self._entry.runtime_data.state
         if st is None:
             return
-        today = date.today()
+        # Місцева дата HA, а не годинник процесу: у контейнері він часто в
+        # UTC, і між 21:00 і опівніччю «сьогодні» було вчорашнім.
+        today = dt_util.now().date()
         today_s = today.isoformat()
         tomorrow_s = (today + timedelta(days=1)).isoformat()
 
         if self._opt("notify_reinvest"):
             ready = {c for c, m in st.reinvest_min.items() if m > 0 and st.accounts.get(c, 0) >= m}
+            # «Вже вистачало» — лише для тих, про кого повідомлення ПІШЛО:
+            # валюта, чиє сповіщення не надіслалось, лишається новою й
+            # пробується знову, а не зникає мовчки.
+            now_ready = ready & self._prev_ready
             for c in sorted(ready - self._prev_ready):
                 bal = st.accounts.get(c, 0)
-                await self._send(
+                if await self._send(
                     f"reinvest:{c}:{today_s}",
                     f"💰 На {c}-рахунку вистачає на реінвестицію ({bal:,.0f} {c}).",
                     actions=[self._open("Що купити", "work/buy/main")],
-                )
-            if ready != self._prev_ready:
-                self._prev_ready = ready
+                ):
+                    now_ready.add(c)
+            if now_ready != self._prev_ready:
+                self._prev_ready = now_ready
                 await self._persist()
 
         # p.title() всюди замість p.isin: вклад ходить у розкладі під
@@ -133,7 +150,7 @@ class NotificationManager:
                     # «Отримано» — та сама ручка, що в сервісі mark_payment:
                     # гроші лягають на рахунок, не чекаючи опівночі.
                     await self._send(
-                        f"coupon:{p.isin}:{today_s}",
+                        payment_key("coupon", p.isin, p.type, today_s),
                         f"📥 Сьогодні виплата: {p.amount:,.0f} {p.currency} по {p.title()}.",
                         actions=[
                             {
@@ -148,7 +165,7 @@ class NotificationManager:
             for p in st.calendar:
                 if p.date == tomorrow_s:
                     await self._send(
-                        f"tomorrow:{p.isin}:{tomorrow_s}",
+                        payment_key("tomorrow", p.isin, p.type, tomorrow_s),
                         f"📅 Завтра виплата: {p.amount:,.0f} {p.currency} по {p.title()}.",
                     )
 
@@ -205,13 +222,15 @@ class NotificationManager:
         if self._opt("notify_auction"):
             offer = st.best_market_offer()
             if offer is not None and offer.date > self._last_auction:
-                await self._send(
+                # Знак зсувається лише після того, як повідомлення пішло:
+                # інакше збій notify ховав аукціон назавжди.
+                if await self._send(
                     f"auction:{offer.currency}|{offer.bucket}:{offer.date}",
                     f"📈 Мінфін {offer.date} розмістив {offer.bucket} під {offer.pct:.2f}% "
                     f"— на {offer.vs_portfolio_pp:.2f} в.п. вище за твою {offer.currency}.",
-                )
-                self._last_auction = offer.date
-                await self._persist()
+                ):
+                    self._last_auction = offer.date
+                    await self._persist()
 
         # Внесок у пенсійний — єдина дія, якої НПФ вимагає.
         #
@@ -277,9 +296,14 @@ class NotificationManager:
 
     async def _send(
         self, key: str, message: str, actions: list[dict[str, str]] | None = None
-    ) -> None:
-        if self._sent.get(key) == date.today().isoformat():
-            return
+    ) -> bool:
+        """Надіслати, якщо ключ у своєму періоді ще не надсилали.
+
+        True — повідомлення пішло або вже йшло раніше (ключ у журналі);
+        False — notify відмовив, і викликач не має вважати подію сповіщеною.
+        """
+        if already_sent(self._sent, key):
+            return True
         payload: dict[str, Any] = {"message": message}
         # Кнопки — лише за опцією, і вона типово ВИМКНЕНА: data.actions
         # розуміє mobile_app, а інший notify-сервіс або промовчить, або
@@ -291,15 +315,17 @@ class NotificationManager:
             await self._hass.services.async_call("notify", self._service, payload, blocking=False)
         except Exception as err:  # noqa: BLE001
             _LOGGER.warning("сповіщення через notify.%s не надіслано: %s", self._service, err)
-            return
-        self._sent[key] = date.today().isoformat()
+            return False
+        today = dt_util.now().date()
+        self._sent[key] = today.isoformat()
         # Відсічка стосується ЛИШЕ журналу надісланого. Множина «на що вже
         # вистачало» і дата останнього аукціону віку не мають: вони
         # описують стан, а не подію, і зістарити їх означало б повернути
-        # той самий повтор після перезапуску.
-        cutoff = (date.today() - timedelta(days=2)).isoformat()
-        self._sent = {k: v for k, v in self._sent.items() if v >= cutoff}
+        # той самий повтор після перезапуску. Відсічка довша за місяць —
+        # місячний ключ мусить дожити до кінця свого місяця (rules).
+        self._sent = prune_sent(self._sent, today)
         await self._persist()
+        return True
 
     async def _persist(self) -> None:
         data: dict[str, Any] = {
