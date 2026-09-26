@@ -19,9 +19,9 @@ from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from .actions import received_action, uri_action
-from .const import CARD_MARK_STALE_DAYS, DOMAIN, SIGNAL_STATE_UPDATED, STALE_AFTER_H
-from .rules import already_sent, payment_key, prune_sent
+from .actions import received_action
+from .const import CARD_MARK_STALE_DAYS, DOMAIN, NOTIFY_OPTIONS, SIGNAL_STATE_UPDATED, STALE_AFTER_H
+from .rules import payment_key, prune_sent
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -89,15 +89,17 @@ class NotificationManager:
     def _service(self) -> str:
         return str(self._entry.options.get("notify_service", "")).strip()
 
-    def _opt(self, key: str, default: bool = True) -> bool:
-        return bool(self._entry.options.get(key, default))
+    def _opt(self, key: str) -> bool:
+        return bool(self._entry.options.get(key, NOTIFY_OPTIONS[key]))
 
     def _open(self, title: str, route: str) -> dict[str, str]:
         """Кнопка «відкрити застосунок» на названому маршруті (#/tab/item/pane).
 
         open_url, а не base_url: кнопку тисне людина з телефона, і поза
         домом адреса локальної мережі не відкриється."""
-        return uri_action(title, f"{self._entry.runtime_data.open_url}/#/{route}")
+        # mobile_app розуміє action=URI з полем uri.
+        uri = f"{self._entry.runtime_data.open_url}/#/{route}"
+        return {"action": "URI", "title": title, "uri": uri}
 
     @callback
     def _on_state(self) -> None:
@@ -112,8 +114,6 @@ class NotificationManager:
             await self._evaluate_locked()
 
     async def _evaluate_locked(self) -> None:
-        if not self._service:
-            return
         st = self._entry.runtime_data.state
         if st is None:
             return
@@ -157,7 +157,7 @@ class NotificationManager:
                                 "action": received_action(p.isin, p.date, self._entry.entry_id),
                                 "title": "Отримано",
                             },
-                            self._open("Відкрити", "work/todo/main"),
+                            self._open("Відкрити", "overview/main/main"),
                         ],
                     )
 
@@ -266,7 +266,7 @@ class NotificationManager:
                     f"💳 «{c.name}»: розрахункова дата {when} ({c.due_date}). "
                     f"Принести {c.bring_by_due_uah:,.0f} {st.currency_symbol()} — "
                     f"і відсотків не буде; мінімум {c.min_due_uah:,.0f} {st.currency_symbol()}.",
-                    actions=[self._open("Борги", "plan/debts/main")],
+                    actions=[self._open("Борги", "plan/debts/state")],
                 )
 
         # Застаріла звірка — раз на місяць, як ліміт концентрації: числа
@@ -302,14 +302,17 @@ class NotificationManager:
         True — повідомлення пішло або вже йшло раніше (ключ у журналі);
         False — notify відмовив, і викликач не має вважати подію сповіщеною.
         """
-        if already_sent(self._sent, key):
+        # Ключ несе свій ПЕРІОД (день, місяць, дату погашення), тож «ключ
+        # уже є» і означає «у цьому періоді вже надіслано». Доти перевірка
+        # була «надіслано СЬОГОДНІ», і місячне нагадування ставало щоденним.
+        if key in self._sent:
             return True
         payload: dict[str, Any] = {"message": message}
         # Кнопки — лише за опцією, і вона типово ВИМКНЕНА: data.actions
         # розуміє mobile_app, а інший notify-сервіс або промовчить, або
         # відмовить на невідомому полі, і тоді людина втратила б саме
         # повідомлення. Увімкнути — свідома дія того, хто знає, куди шле.
-        if actions and self._opt("notify_actions", False):
+        if actions and self._opt("notify_actions"):
             payload["data"] = {"actions": actions}
         try:
             await self._hass.services.async_call("notify", self._service, payload, blocking=False)

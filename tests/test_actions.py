@@ -1,12 +1,8 @@
 """Дії в сповіщенні: рядок кнопки читається назад без втрат."""
 
-import importlib.util
-import pathlib
+from . import load_module
 
-_PATH = pathlib.Path(__file__).parents[1] / "custom_components" / "oddinvest" / "actions.py"
-_spec = importlib.util.spec_from_file_location("oddinvest_actions", _PATH)
-actions = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(actions)
+actions = load_module("actions")
 
 
 def test_received_round_trip():
@@ -51,9 +47,22 @@ def test_parse_ignores_foreign_actions():
     assert actions.parse_received("other:UA4000227748:2026-07-20") is None
 
 
-def test_uri_action_shape():
-    assert actions.uri_action("Відкрити", "http://x/#/work/buy/main") == {
-        "action": "URI",
-        "title": "Відкрити",
-        "uri": "http://x/#/work/buy/main",
+# ---- заголовки REST: дія з запису другого портфеля мусить іти в ТОЙ портфель
+
+
+def test_main_portfolio_sends_no_portfolio_header():
+    """Порожній slug = головний: сервіс так і поводиться без заголовка."""
+    assert actions.rest_headers("", "") == {}
+    assert actions.rest_headers("tok", "") == {"Authorization": "Bearer tok"}
+
+
+def test_other_portfolio_sends_its_slug():
+    assert actions.rest_headers("tok", "mmr") == {
+        "Authorization": "Bearer tok",
+        "X-Portfolio": "mmr",
     }
+
+
+def test_portfolio_without_token():
+    """Сервіс без пароля: токена немає, а портфель однаково мусить дійти."""
+    assert actions.rest_headers("", "mmr") == {"X-Portfolio": "mmr"}

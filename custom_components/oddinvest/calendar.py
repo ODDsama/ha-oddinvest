@@ -41,8 +41,7 @@ class OddInvestCalendar(OddInvestEntity, CalendarEntity):
     _attr_translation_key = "payments"
 
     def __init__(self, data, entry_id: str) -> None:
-        super().__init__(data, entry_id)
-        self._attr_unique_id = f"{entry_id}_payments_calendar"
+        super().__init__(data, entry_id, "payments_calendar")
 
     @property
     def event(self) -> CalendarEvent | None:

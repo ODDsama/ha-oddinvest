@@ -22,8 +22,7 @@ class RefreshButton(OddInvestEntity, ButtonEntity):
     _attr_translation_key = "refresh"
 
     def __init__(self, data, entry_id: str) -> None:
-        super().__init__(data, entry_id)
-        self._attr_unique_id = f"{entry_id}_refresh"
+        super().__init__(data, entry_id, "refresh")
 
     @property
     def available(self) -> bool:  # кнопка живе, поки живий REST, не MQTT

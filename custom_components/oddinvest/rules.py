@@ -16,16 +16,6 @@ from datetime import date, datetime, timedelta
 SENT_KEEP_DAYS = 35
 
 
-def already_sent(sent: dict[str, str], key: str) -> bool:
-    """Чи надсилали вже повідомлення з цим ключем.
-
-    Доти перевірка була «надіслано СЬОГОДНІ», і ключ із місяцем
-    («limit:…:2026-09», «npf:2026-09») проходив щодня: місячне нагадування
-    ставало щоденним — рівно те, від чого його робили місячним.
-    """
-    return key in sent
-
-
 def prune_sent(sent: dict[str, str], today: date) -> dict[str, str]:
     """Журнал без записів, старших за SENT_KEEP_DAYS."""
     cutoff = (today - timedelta(days=SENT_KEEP_DAYS)).isoformat()

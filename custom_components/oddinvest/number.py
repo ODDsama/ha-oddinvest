@@ -25,7 +25,7 @@ from .models import Settings
 
 @dataclass(frozen=True, kw_only=True)
 class OddInvestNumberDescription(NumberEntityDescription):
-    setting_key: str
+    # key — він же ключ налаштування сервіса (PUT /api/settings).
     value_fn: Callable[[Settings], float | None]
     to_payload: Callable[[float], str] = lambda v: f"{v:g}"
 
@@ -46,7 +46,6 @@ NUMBERS: tuple[OddInvestNumberDescription, ...] = (
     OddInvestNumberDescription(
         key="usd_target_share_pct",
         translation_key="usd_target_share_pct",
-        setting_key="usd_target_share_pct",
         native_unit_of_measurement="%",
         mode=NumberMode.SLIDER,
         native_min_value=0,
@@ -57,7 +56,6 @@ NUMBERS: tuple[OddInvestNumberDescription, ...] = (
     OddInvestNumberDescription(
         key="eur_target_share_pct",
         translation_key="eur_target_share_pct",
-        setting_key="eur_target_share_pct",
         native_unit_of_measurement="%",
         mode=NumberMode.SLIDER,
         native_min_value=0,
@@ -68,7 +66,6 @@ NUMBERS: tuple[OddInvestNumberDescription, ...] = (
     OddInvestNumberDescription(
         key="goal_amount_uah",
         translation_key="goal_amount_uah",
-        setting_key="goal_amount_uah",
         native_unit_of_measurement="UAH",
         # BOX, не SLIDER: ціль — це сума, яку вводять, а не підкручують.
         # Повзунок від нуля до мільйонів не має корисного кроку.
@@ -97,9 +94,8 @@ class OddInvestNumber(OddInvestEntity, NumberEntity):
     entity_description: OddInvestNumberDescription
 
     def __init__(self, data, entry_id: str, desc: OddInvestNumberDescription) -> None:
-        super().__init__(data, entry_id)
+        super().__init__(data, entry_id, desc.key)
         self.entity_description = desc
-        self._attr_unique_id = f"{entry_id}_{desc.key}"
 
     @property
     def native_value(self) -> float | None:
@@ -112,6 +108,6 @@ class OddInvestNumber(OddInvestEntity, NumberEntity):
         await async_put_setting(
             self.hass,
             self._data,
-            self.entity_description.setting_key,
+            self.entity_description.key,
             self.entity_description.to_payload(value),
         )

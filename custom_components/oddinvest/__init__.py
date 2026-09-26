@@ -29,10 +29,9 @@ from .const import (
     SIGNAL_AVAILABILITY,
     SIGNAL_STATE_UPDATED,
 )
-from .actions import parse_received, pick_targets
+from .actions import parse_received, pick_targets, rest_headers
 from .alerts import NotificationManager
 from .models import ContractError, SchemaMismatch, StateDoc
-from .rest import rest_headers
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -198,6 +197,10 @@ async def async_refresh_service(hass: HomeAssistant, data: OddInvestData) -> Non
     await _request(hass, data, "POST", "/api/refresh")
 
 
+async def _mark_payment(hass: HomeAssistant, data: OddInvestData, body: dict) -> None:
+    await _request(hass, data, "POST", "/api/payments/status", json_body=body, timeout_s=30)
+
+
 async def async_put_setting(hass: HomeAssistant, data: OddInvestData, key: str, value: str) -> None:
     """PUT одного налаштування; сервіс сам перепублікує стан у MQTT."""
     await _request(hass, data, "PUT", "/api/settings", json_body={key: value}, timeout_s=30)
@@ -249,14 +252,7 @@ def _register_services(hass: HomeAssistant) -> None:
             "status": call.data["status"],
         }
         for entry in _targets(hass, str(call.data.get("config_entry_id", ""))):
-            await _request(
-                hass,
-                entry.runtime_data,
-                "POST",
-                "/api/payments/status",
-                json_body=body,
-                timeout_s=30,
-            )
+            await _mark_payment(hass, entry.runtime_data, body)
 
     hass.services.async_register(DOMAIN, SERVICE_REFRESH, handle_refresh)
     hass.services.async_register(DOMAIN, SERVICE_MARK_PAYMENT, handle_mark_payment)
@@ -283,14 +279,7 @@ def _register_services(hass: HomeAssistant) -> None:
             entries = [e for e in entries if e.entry_id == entry_id]
         for entry in entries:
             try:
-                await _request(
-                    hass,
-                    entry.runtime_data,
-                    "POST",
-                    "/api/payments/status",
-                    json_body=body,
-                    timeout_s=30,
-                )
+                await _mark_payment(hass, entry.runtime_data, body)
             except HomeAssistantError as err:
                 # Кнопка — не сервіс: помилку нема кому показати, крім журналу.
                 _LOGGER.warning("«Отримано» по %s за %s не записано: %s", isin, pay_date, err)

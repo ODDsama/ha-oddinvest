@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import date
 from typing import Any
 
@@ -49,14 +49,7 @@ def _xirr_attrs(cur: str) -> Callable[[StateDoc], dict[str, Any] | None]:
 
     def attrs(doc: StateDoc) -> dict[str, Any] | None:
         r = doc.realized.get(cur)
-        if r is None:
-            return None
-        return {
-            "gain": r.gain,
-            "gain_pct": r.gain_pct,
-            "money_days": r.money_days,
-            "min_days": r.min_days,
-        }
+        return None if r is None else asdict(r)
 
     return attrs
 
@@ -84,9 +77,7 @@ def _next_payment_attrs(doc: StateDoc) -> dict[str, Any] | None:
 
 
 def _ladder_attrs(doc: StateDoc) -> dict[str, Any]:
-    return {
-        "ladder": [{"year": r.year, "uah": r.uah, "usd": r.usd, "eur": r.eur} for r in doc.ladder]
-    }
+    return {"ladder": [asdict(r) for r in doc.ladder]}
 
 
 def _fx_window_attrs(currency: str):
@@ -285,23 +276,7 @@ def _cards_attrs(doc: StateDoc) -> dict[str, Any] | None:
         "nearest": near.name if near else "",
         "nearest_bring_uah": near.bring_by_due_uah if near else 0.0,
         "nearest_min_uah": near.min_due_uah if near else 0.0,
-        "cards": [
-            {
-                "name": c.name,
-                "known": c.known,
-                "mark_date": c.mark_date,
-                "mark_age_days": c.mark_age_days,
-                "due_date": c.due_date,
-                "days_to_due": c.days_to_due,
-                "bring_by_due_uah": c.bring_by_due_uah,
-                "min_due_uah": c.min_due_uah,
-                "free_uah": c.free_uah,
-                "debt_uah": c.debt_uah,
-                "used_pct": c.used_pct,
-                "exit_by": c.exit_by,
-            }
-            for c in d.cards
-        ],
+        "cards": [asdict(c) for c in d.cards],
     }
 
 
@@ -326,19 +301,7 @@ def _tasks_attrs(doc: StateDoc) -> dict[str, Any]:
         "top_why": first.why if first else "",
         "top_action": first.action if first else "",
         "top_kind": first.kind if first else "",
-        "tasks": [
-            {
-                "id": t.id,
-                "sev": t.sev,
-                "kind": t.kind,
-                "title": t.title,
-                "why": t.why,
-                "when": t.when,
-                "action": t.action,
-                "amount_uah": t.amount_uah,
-            }
-            for t in doc.tasks
-        ],
+        "tasks": [asdict(t) for t in doc.tasks],
     }
 
 
@@ -681,9 +644,8 @@ class OddInvestSensor(OddInvestEntity, SensorEntity):
     _unrecorded_attributes = frozenset({"ladder", "top_payments", "tasks", "cards"})
 
     def __init__(self, data, entry_id: str, desc: OddInvestSensorDescription) -> None:
-        super().__init__(data, entry_id)
+        super().__init__(data, entry_id, desc.key)
         self.entity_description = desc
-        self._attr_unique_id = f"{entry_id}_{desc.key}"
 
     @property
     def native_value(self):

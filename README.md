@@ -171,15 +171,17 @@ calendar-тригерами й офсетами.
 
 - `oddinvest.refresh` — оновити довідник НБУ і курс на боці сервіса,
   зробити знімок і републікувати стан.
-- `oddinvest.mark_payment` — позначити виплату `received`/`reinvested`
-  (isin + pay_date); знімає її з лічильника неперевкладених.
+- `oddinvest.mark_payment` — позначити виплату `received` або зняти
+  позначку (`none`); isin + pay_date.
 
 ## Blueprints
 
 `blueprints/automation/oddinvest/`:
-- `uninvested_reminder.yaml` — нагадування перевкласти виплати;
-- `payment_tomorrow.yaml` — сповіщення о 18:00 напередодні виплати
-  (calendar-тригер з офсетом).
+- `uninvested_reminder.yaml` — нагадування перевкласти виплати.
+
+Нагадування напередодні виплати окремим blueprint-ом більше не йде: його
+шле сама інтеграція (опція «Завтра виплата»), а два шляхи до того самого
+повідомлення слали б його двічі.
 
 Приклад дашборда — `examples/dashboard.yaml`.
 

@@ -43,8 +43,7 @@ class GoalDate(OddInvestEntity, DateEntity):
     _attr_translation_key = "goal_date"
 
     def __init__(self, data, entry_id: str) -> None:
-        super().__init__(data, entry_id)
-        self._attr_unique_id = f"{entry_id}_goal_date"
+        super().__init__(data, entry_id, "goal_date")
 
     @property
     def native_value(self) -> date | None:

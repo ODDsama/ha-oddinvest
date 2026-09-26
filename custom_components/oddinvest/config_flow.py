@@ -17,7 +17,9 @@ from homeassistant.core import callback
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
+from .actions import rest_headers
 from .const import (
+    NOTIFY_OPTIONS,
     CONF_BASE_URL,
     CONF_PORTFOLIO,
     CONF_TOKEN,
@@ -26,7 +28,6 @@ from .const import (
     DOMAIN,
 )
 from .models import ContractError, StateDoc
-from .rest import rest_headers
 from .rules import prefix_matches_portfolio
 
 
@@ -162,25 +163,10 @@ class OddInvestOptionsFlow(OptionsFlow):
                         mode=selector.SelectSelectorMode.DROPDOWN,
                     )
                 ),
-                vol.Optional("notify_coupon", default=o.get("notify_coupon", True)): bool,
-                vol.Optional("notify_reinvest", default=o.get("notify_reinvest", True)): bool,
-                vol.Optional("notify_tomorrow", default=o.get("notify_tomorrow", True)): bool,
-                vol.Optional("notify_goal", default=o.get("notify_goal", True)): bool,
-                vol.Optional("notify_maturity", default=o.get("notify_maturity", True)): bool,
-                vol.Optional("notify_stale", default=o.get("notify_stale", True)): bool,
-                vol.Optional(
-                    "notify_concentration", default=o.get("notify_concentration", True)
-                ): bool,
-                vol.Optional("notify_auction", default=o.get("notify_auction", True)): bool,
-                vol.Optional(
-                    "notify_npf_contribution",
-                    default=o.get("notify_npf_contribution", True),
-                ): bool,
-                # Типово вимкнено: кнопки розуміє лише mobile_app (довід —
-                # у alerts._send).
-                vol.Optional("notify_actions", default=o.get("notify_actions", False)): bool,
-                vol.Optional("notify_card_due", default=o.get("notify_card_due", True)): bool,
-                vol.Optional("notify_card_stale", default=o.get("notify_card_stale", True)): bool,
+                **{
+                    vol.Optional(k, default=o.get(k, default)): bool
+                    for k, default in NOTIFY_OPTIONS.items()
+                },
                 vol.Optional(
                     "goal_threshold", default=o.get("goal_threshold", 80)
                 ): selector.NumberSelector(

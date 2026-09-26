@@ -15,8 +15,9 @@ class OddInvestEntity(Entity):
     _attr_has_entity_name = True
     _attr_should_poll = False
 
-    def __init__(self, data, entry_id: str) -> None:
+    def __init__(self, data, entry_id: str, key: str) -> None:
         self._data = data
+        self._attr_unique_id = f"{entry_id}_{key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry_id)},
             name="ODD Invest",

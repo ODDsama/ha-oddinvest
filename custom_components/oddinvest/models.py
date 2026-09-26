@@ -13,7 +13,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field, fields, replace
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -57,7 +57,7 @@ def _age_hours(stamp: str, now: datetime) -> float | None:
     if not stamp:
         return None
     try:
-        t = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        t = datetime.fromisoformat(stamp)
     except ValueError:
         return None
     if t.tzinfo is None:
@@ -85,20 +85,6 @@ class SchemaMismatch(ContractError):
 
 
 @dataclass(frozen=True)
-class NextPayment:
-    date: str
-    isin: str
-    type: str
-    amount: float
-    currency: str
-    # label — людська назва, коли ISIN мовчить: «вклад» для синтетичного
-    # "deposit:<id>". Правило живе в сервісі й приходить готовим — доти
-    # воно було записане у фронтенді, і сповіщення тут написали б його
-    # втретє, третьою мовою.
-    label: str = ""
-
-
-@dataclass(frozen=True)
 class LadderRow:
     year: int
     uah: float
@@ -113,7 +99,11 @@ class PaymentRow:
     type: str
     amount: float
     currency: str
-    label: str = ""  # див. NextPayment.label
+    # label — людська назва, коли ISIN мовчить: «вклад» для синтетичного
+    # "deposit:<id>". Правило живе в сервісі й приходить готовим — доти
+    # воно було записане у фронтенді, і сповіщення тут написали б його
+    # втретє, третьою мовою.
+    label: str = ""
 
     def title(self) -> str:
         """Як називати цей рядок людині."""
@@ -272,7 +262,6 @@ class IdleCash:
     investable_uah: float = 0.0
     since: str = ""
     days: int = 0
-    age_days: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -312,7 +301,6 @@ class ConcentrationRow:
 
     dimension: str = ""
     key: str = ""
-    amount_uah: float = 0.0
     share_pct: float = 0.0
     limit_pct: float = 0.0
     over_uah: float = 0.0
@@ -339,7 +327,6 @@ class Task:
 
     id: str = ""
     sev: str = ""
-    rank: int = 0
     kind: str = ""
     title: str = ""
     why: str = ""
@@ -388,7 +375,6 @@ class MarketYieldRow:
     bucket: str = ""
     pct: float = 0.0
     date: str = ""
-    isin: str = ""
     vs_portfolio_pp: float = 0.0
 
 
@@ -411,10 +397,6 @@ class Realized:
 
 @dataclass(frozen=True)
 class Settings:
-    # monthly_target_uah — місячний план. ПОХІДНЕ значення: виводиться з
-    # цілі й дедлайну, задати його не можна. Довго воно й не приходило
-    # зовсім — гілка, що його публікувала, у бекенді була недосяжна.
-    monthly_target_uah: float | None = None
     usd_target_share_pct: float | None = None
     eur_target_share_pct: float | None = None
     # assumed_rate_pct прибрано разом із полем у бекенді: воно не
@@ -431,7 +413,6 @@ class Settings:
 
 @dataclass(frozen=True)
 class StateDoc:
-    schema: int
     generated_at: str
     invested_uah: float
     nominal_uah_eq: float
@@ -441,7 +422,7 @@ class StateDoc:
     month_target_uah: float
     month_progress_pct: int
     month_incoming_uah: float
-    next_payment: NextPayment | None = None
+    next_payment: PaymentRow | None = None
     eur_share_pct: float = 0.0
     account_uah: float = 0.0
     # funds_uah — сертифікати фондів у грн-екв. Необов'язкове: старіший
@@ -555,29 +536,11 @@ class StateDoc:
     tasks: tuple[Task, ...] = field(default_factory=tuple)
     # currency — валюта, у якій показані ВСІ суми документа (schema 3).
     # Обов'язкове: сенсор із грошима без одиниці брехав би мовчки.
-    # currency_note — чому показано не те, що просили (курсу ще немає).
     currency: str = BOOK_CURRENCY
-    currency_note: str = ""
 
     def currency_symbol(self) -> str:
         """Символ валюти документа для прози сповіщень: ₴, $ чи €."""
         return CURRENCY_SYMBOL.get(self.currency, self.currency)
-
-    REQUIRED = (
-        "schema",
-        "generated_at",
-        "currency",
-        "invested_uah",
-        "nominal_uah_eq",
-        "usd_share_pct",
-        "uninvested_uah",
-        "month_invested_uah",
-        "month_target_uah",
-        "month_progress_pct",
-        "month_incoming_uah",
-        "ladder",
-        "top_payments",
-    )
 
     def net_worth(self) -> float:
         """Чистий капітал: готове число сервіса, а без нього — капітал.
@@ -682,11 +645,11 @@ class StateDoc:
         if not isinstance(raw, dict):
             raise ContractError("очікували JSON-об'єкт")
 
-        missing = [k for k in cls.REQUIRED if k not in raw]
-        if missing:
-            raise ContractError(f"відсутні обов'язкові поля: {missing}")
-
-        schema = raw["schema"]
+        # Окремого переліку обовʼязкових полів немає: обовʼязкові — це поля
+        # дата-класу без типового значення плюс raw[...] у _build, і
+        # відсутнє дає ContractError із назвою поля нижче. Перелік поруч
+        # уже раз розійшовся зі схемою (у ньому бракувало calendar).
+        schema = raw.get("schema")
         if schema != SUPPORTED_SCHEMA:
             raise SchemaMismatch(schema, SUPPORTED_SCHEMA)
 
@@ -697,143 +660,92 @@ class StateDoc:
         # стеком у журналі, а config_flow показував «невідома помилка»
         # замість «сервіс віддає не той документ».
         try:
-            return cls._build(raw, schema)
+            return cls._build(raw)
         except ContractError:
             raise
         except (TypeError, KeyError, ValueError, AttributeError) as err:
             raise ContractError(f"поле не того вигляду: {type(err).__name__}: {err}") from err
 
     @classmethod
-    def _build(cls, raw: dict[str, Any], schema: Any) -> "StateDoc":
-        np = None
-        if raw.get("next_payment"):
-            p = raw["next_payment"]
-            np = NextPayment(
-                date=str(p["date"]),
-                isin=str(p["isin"]),
-                type=str(p["type"]),
-                amount=float(p["amount"]),
-                currency=str(p["currency"]),
-                label=str(p.get("label", "")),
-            )
+    def _build(cls, raw: dict[str, Any]) -> "StateDoc":
+        """Скаляри верхнього рівня — через _dc, вкладене — поштучно."""
 
-        return cls(
-            schema=int(schema),
-            generated_at=str(raw["generated_at"]),
-            invested_uah=float(raw["invested_uah"]),
-            nominal_uah_eq=float(raw["nominal_uah_eq"]),
-            usd_share_pct=float(raw["usd_share_pct"]),
-            uninvested_uah=float(raw["uninvested_uah"]),
-            month_invested_uah=float(raw["month_invested_uah"]),
-            month_target_uah=float(raw["month_target_uah"]),
-            month_progress_pct=int(raw["month_progress_pct"]),
-            month_incoming_uah=float(raw["month_incoming_uah"]),
-            next_payment=np,
-            eur_share_pct=float(raw.get("eur_share_pct", 0.0)),
-            account_uah=float(raw.get("account_uah", 0.0)),
+        def rows(kind, key: str) -> tuple:
+            return tuple(_dc(kind, r) for r in (raw.get(key) or ()) if r)
+
+        def num_map(key: str) -> dict[str, float]:
+            return {str(k): float(v) for k, v in (raw.get(key) or {}).items()}
+
+        return replace(
+            _dc(cls, raw),
             currency=str(raw["currency"]),
-            currency_note=str(raw.get("currency_note", "")),
-            funds_uah=float(raw.get("funds_uah", 0.0)),
-            deposits_uah=float(raw.get("deposits_uah", 0.0)),
-            reserve_uah=float(raw.get("reserve_uah", 0.0)),
-            goals_uah=float(raw.get("goals_uah", 0.0)),
-            npf_uah=float(raw.get("npf_uah", 0.0)),
-            npf_cost_uah=float(raw.get("npf_cost_uah", 0.0)),
-            npf_contrib_due=bool(raw.get("npf_contrib_due", False)),
-            capital_uah=(float(raw["capital_uah"]) if raw.get("capital_uah") is not None else None),
-            reinvest_min_uah=float(raw.get("reinvest_min_uah", 0.0)),
-            accounts={str(k): float(v) for k, v in (raw.get("accounts") or {}).items()},
-            reinvest_min={str(k): float(v) for k, v in (raw.get("reinvest_min") or {}).items()},
-            ladder=tuple(
-                LadderRow(
-                    year=int(r["year"]),
-                    uah=float(r["uah"]),
-                    usd=float(r["usd"]),
-                    eur=float(r.get("eur", 0.0)),
-                )
-                for r in raw["ladder"]
-            ),
-            top_payments=tuple(_payment_row(p) for p in raw["top_payments"]),
-            calendar=tuple(_payment_row(p) for p in raw.get("calendar", ())),
-            settings=_settings(raw.get("settings")),
-            xirr={str(k): float(v) for k, v in (raw.get("xirr") or {}).items()},
+            next_payment=_dc(PaymentRow, raw.get("next_payment")),
+            accounts=num_map("accounts"),
+            reinvest_min=num_map("reinvest_min"),
+            ladder=tuple(_row(LadderRow, r) for r in raw["ladder"]),
+            top_payments=tuple(_row(PaymentRow, p) for p in raw["top_payments"]),
+            calendar=rows(PaymentRow, "calendar"),
+            settings=_dc(Settings, raw.get("settings")),
+            xirr=num_map("xirr"),
             realized={
                 str(k): _dc(Realized, v) for k, v in (raw.get("realized") or {}).items() if v
             },
-            income_monthly_now=float(raw.get("income_monthly_now", 0.0)),
-            accrued_uah=float(raw.get("accrued_uah", 0.0)),
-            blended_yield_pct=float(raw.get("blended_yield_pct", 0.0)),
-            blended_yield_real_pct=float(raw.get("blended_yield_real_pct", 0.0)),
-            portfolio_yield_pct=float(raw.get("portfolio_yield_pct", 0.0)),
-            funds_yield_pct=float(raw.get("funds_yield_pct", 0.0)),
-            nbu_refreshed_at=str(raw.get("nbu_refreshed_at", "")),
             independence=_dc(Independence, raw.get("independence")),
             liquidity=_dc(Liquidity, raw.get("liquidity")),
             reserve=_dc(Reserve, raw.get("reserve")),
-            net_worth_uah=(
-                float(raw["net_worth_uah"]) if raw.get("net_worth_uah") is not None else None
-            ),
             capital_delta_30=_dc(CapitalDelta, raw.get("capital_delta_30")),
             idle=_dc(IdleCash, raw.get("idle")),
             idle_cost=_dc(IdleCost, raw.get("idle_cost")),
             debt=_debt(raw.get("debt")),
-            concentration=tuple(_dc(ConcentrationRow, r) for r in (raw.get("concentration") or ())),
-            market_yield=tuple(_dc(MarketYieldRow, r) for r in (raw.get("market_yield") or ())),
-            fx_window=tuple(_dc(FXWindowRow, r) for r in (raw.get("fx_window") or ())),
-            tasks=tuple(_dc(Task, r) for r in (raw.get("tasks") or ())),
+            concentration=rows(ConcentrationRow, "concentration"),
+            market_yield=rows(MarketYieldRow, "market_yield"),
+            fx_window=rows(FXWindowRow, "fx_window"),
+            tasks=rows(Task, "tasks"),
         )
 
 
 def _debt(raw: dict[str, Any] | None) -> DebtPlan | None:
-    """Блок debt: скаляри через _dc, картки — руками.
-
-    _dc уміє лише плоскі скаляри, а cards — список обʼєктів; той самий
-    випадок, що next_payment і calendar. Поля exit і fill_* сервіса тут
-    не читаються: вони проєкція плану виходу й стелі дострокового, і
-    сутності з них немає — атрибути без читача були б порожнім швом.
-    """
+    """Блок debt. Поля exit і fill_* сервіса тут не читаються: вони проєкція
+    плану виходу й стелі дострокового, і сутності з них немає — атрибути без
+    читача були б порожнім швом."""
     if not raw:
         return None
-    plan = _dc(DebtPlan, raw)
-    return DebtPlan(
-        total_uah=plan.total_uah,
-        top_rate_pct=plan.top_rate_pct,
-        top_name=plan.top_name,
-        due_this_month_uah=plan.due_this_month_uah,
-        cards=tuple(_card(c) for c in (raw.get("cards") or ()) if c),
-    )
+    cards = tuple(_dc(DebtCard, c) for c in (raw.get("cards") or ()) if c)
+    return replace(_dc(DebtPlan, raw), cards=cards)
 
 
-def _card(raw: dict[str, Any]) -> DebtCard:
-    # known — bool, а _dc зводить усе до int/float/str: рядок "False" був
-    # би істинним. Тому картка збирається явно, полем за полем.
-    return DebtCard(
-        name=str(raw.get("name", "")),
-        known=bool(raw.get("known", False)),
-        mark_date=str(raw.get("mark_date", "")),
-        mark_age_days=int(raw.get("mark_age_days", 0)),
-        due_date=str(raw.get("due_date", "")),
-        days_to_due=int(raw.get("days_to_due", 0)),
-        bring_by_due_uah=float(raw.get("bring_by_due_uah", 0.0)),
-        min_due_uah=float(raw.get("min_due_uah", 0.0)),
-        free_uah=float(raw.get("free_uah", 0.0)),
-        debt_uah=float(raw.get("debt_uah", 0.0)),
-        used_pct=float(raw.get("used_pct", 0.0)),
-        exit_by=str(raw.get("exit_by", "")),
-    )
+def _row(kind, raw: Any):
+    """Рядок ОБОВʼЯЗКОВОГО списку: null чи порожній обʼєкт там — порушення
+    контракту, а не «сервіс цього не надсилає», як у _dc."""
+    if not raw:
+        raise TypeError(f"порожній рядок {kind.__name__}")
+    return _dc(kind, raw)
+
+
+# Анотації тут рядкові (from __future__ import annotations), тож тип поля
+# впізнається за назвою. Решта — вкладені обʼєкти й колекції — лишається
+# типовим значенням, і її заповнює _build.
+_SCALAR = {
+    "int": int,
+    "float": float,
+    "str": str,
+    "bool": bool,
+    "float | None": float,
+    "str | None": str,
+}
 
 
 def _dc(cls, raw: dict[str, Any] | None):
-    """Обʼєкт контракту → дата-клас, полями лише з нього.
+    """Обʼєкт контракту → дата-клас, скалярними полями лише з нього.
 
-    Один помічник на всі вкладені обʼєкти замість чотирьох майже
-    однакових функцій. Робить рівно те, що вимагають правила читання
-    контракту в шапці модуля:
+    Один помічник на всі обʼєкти документа. Робить рівно те, що вимагають
+    правила читання контракту в шапці модуля:
 
     - НЕВІДОМІ поля документа ігноруються (сервіс еволюціонує додаванням,
       і нове поле не має валити стару інтеграцію);
     - ВІДСУТНІ поля лишаються дефолтами дата-класу, тобто старіший сервіс
-      теж читається;
+      теж читається; поле БЕЗ дефолту обовʼязкове, і його відсутність —
+      TypeError, який from_payload перетворює на ContractError;
     - тип береться з анотації поля, тож float залишається float навіть
       коли JSON приніс ціле.
 
@@ -843,44 +755,10 @@ def _dc(cls, raw: dict[str, Any] | None):
     """
     if not raw:
         return None
-    kinds = {f.name: f.type for f in fields(cls)}
     kwargs: dict[str, Any] = {}
-    for name, kind in kinds.items():
-        if name not in raw or raw[name] is None:
-            continue
-        v = raw[name]
-        # Анотації тут рядкові (from __future__ import annotations), тож
-        # звіряємось із назвою типу, а не з самим типом.
-        kwargs[name] = int(v) if kind == "int" else float(v) if kind == "float" else str(v)
+    for f in fields(cls):
+        conv = _SCALAR.get(f.type)
+        v = raw.get(f.name)
+        if conv is not None and v is not None:
+            kwargs[f.name] = conv(v)
     return cls(**kwargs)
-
-
-def _settings(raw: dict[str, Any] | None) -> Settings | None:
-    if not raw:
-        return None
-
-    def num(key: str) -> float | None:
-        v = raw.get(key)
-        return float(v) if v is not None else None
-
-    gd = raw.get("goal_date")
-    pu = raw.get("public_url")
-    return Settings(
-        monthly_target_uah=num("monthly_target_uah"),
-        usd_target_share_pct=num("usd_target_share_pct"),
-        eur_target_share_pct=num("eur_target_share_pct"),
-        goal_amount_uah=num("goal_amount_uah"),
-        goal_date=str(gd) if gd else None,
-        public_url=str(pu) if pu else None,
-    )
-
-
-def _payment_row(p: dict[str, Any]) -> PaymentRow:
-    return PaymentRow(
-        date=str(p["date"]),
-        isin=str(p["isin"]),
-        type=str(p["type"]),
-        amount=float(p["amount"]),
-        currency=str(p["currency"]),
-        label=str(p.get("label", "")),
-    )

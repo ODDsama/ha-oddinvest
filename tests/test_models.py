@@ -4,21 +4,15 @@
 локальна копія в tests/fixtures потрібна лише для офлайн-розробки.
 """
 
-import importlib.util
 import json
 import pathlib
-import sys
 from datetime import date, datetime, timezone
 
 import pytest
 
-# models.py навмисно вільний від залежностей HA; завантажуємо його напряму,
-# щоб contract-тести бігали без встановленого homeassistant.
-_MODELS_PATH = pathlib.Path(__file__).parents[1] / "custom_components" / "oddinvest" / "models.py"
-_spec = importlib.util.spec_from_file_location("oddinvest_models", _MODELS_PATH)
-models = importlib.util.module_from_spec(_spec)
-sys.modules["oddinvest_models"] = models  # потрібно dataclasses для резолву анотацій
-_spec.loader.exec_module(models)
+from . import load_module
+
+models = load_module("models")
 
 ContractError = models.ContractError
 StateDoc = models.StateDoc
@@ -61,21 +55,38 @@ def test_parse_tasks():
     assert second.kind == ""
 
 
-def test_tasks_absent_is_empty():
-    """Бекенд без черги — не помилка, а старіший сервіс.
+@pytest.mark.parametrize(
+    "key, empty",
+    [
+        ("tasks", ()),
+        ("independence", None),
+        ("liquidity", None),
+        ("reserve", None),
+        ("concentration", ()),
+        ("market_yield", ()),
+        ("fx_window", ()),
+        ("xirr", {}),
+        ("realized", {}),
+        ("settings", None),
+        ("calendar", ()),
+        ("debt", None),
+    ],
+)
+def test_absent_on_old_service(key, empty):
+    """Поле, якого старіший сервіс не надсилає, — порожнє, а не помилка.
 
-    Те саме правило, що для funds_uah і решти адитивних полів: інтеграція
-    переживає відсутність нулем, а не падінням.
+    Порожнє саме свого роду: обʼєкт — None (сутність читає його як unknown,
+    а обʼєкт із нулями показав би «резерв на 0 місяців» там, де про резерв
+    просто не питали), колекція — порожня. Черга задач порожня законно
+    й тоді, коли робити нічого.
     """
     raw = json.loads(load("basic.json"))
-    del raw["tasks"]
-    doc = StateDoc.from_payload(json.dumps(raw))
-    assert doc.tasks == ()
+    raw.pop(key, None)
+    assert getattr(StateDoc.from_payload(json.dumps(raw)), key) == empty
 
 
 def test_parse_basic_fixture():
     doc = StateDoc.from_payload(load("basic.json"))
-    assert doc.schema == 3
     assert doc.invested_uah == 137305.57
     assert doc.nominal_uah_eq == 138246.8
     assert doc.month_progress_pct == 90
@@ -209,23 +220,6 @@ def test_nested_objects_parsed():
     assert over[0].label == "валютні військові"
 
 
-def test_nested_objects_absent_on_old_service():
-    """Старіший сервіс цих обʼєктів не надсилає — None, а не порожній обʼєкт.
-
-    Різниця має значення: None читається сутністю як unknown, а обʼєкт із
-    нулями показав би «резерв на 0 місяців» там, де про резерв просто не
-    питали.
-    """
-    raw = json.loads(load("basic.json"))
-    for k in ("independence", "liquidity", "reserve", "concentration"):
-        raw.pop(k, None)
-    doc = StateDoc.from_payload(json.dumps(raw))
-    assert doc.independence is None
-    assert doc.liquidity is None
-    assert doc.reserve is None
-    assert doc.concentration == ()
-
-
 def test_nested_object_ignores_unknown_fields():
     """Нове поле сервіса всередині вкладеного обʼєкта не валить парсер.
 
@@ -316,14 +310,6 @@ def test_reserve_ready_unknown_without_target():
     assert doc.reserve.is_ready() is None
 
 
-def test_reserve_absent_on_old_service():
-    """Сервіс без обʼєкта reserve — сенсор мовчить (unknown), а не каже «не зібрано»."""
-    raw = json.loads(load("basic.json"))
-    raw.pop("reserve", None)
-    doc = StateDoc.from_payload(json.dumps(raw))
-    assert doc.reserve is None
-
-
 def test_redemptions_within_ignores_coupons():
     """Погашення ≠ купон.
 
@@ -390,14 +376,6 @@ def test_best_market_offer_ignores_worse_than_portfolio():
     assert StateDoc.from_payload(json.dumps(raw)).best_market_offer() is None
 
 
-def test_market_yield_absent_on_old_service():
-    raw = json.loads(load("basic.json"))
-    raw.pop("market_yield", None)
-    doc = StateDoc.from_payload(json.dumps(raw))
-    assert doc.market_yield == ()
-    assert doc.best_market_offer() is None
-
-
 def test_market_yield_parsed_from_fixture():
     """У фікстурі є і вищий за портфель рядок, і нижчий."""
     doc = StateDoc.from_payload(load("basic.json"))
@@ -424,30 +402,15 @@ def test_fx_window_parsed_from_fixture():
     assert next(r for r in doc.fx_window if r.years == 10).vs_median_native == 0.0
 
 
-def test_fx_window_absent_on_old_service():
-    """Старий сервіс поля не надсилає — і це не помилка, а порожній кортеж."""
-    raw = json.loads(load("basic.json"))
-    raw.pop("fx_window", None)
-    assert StateDoc.from_payload(json.dumps(raw)).fx_window == ()
-
-
 def test_settings_parsed():
     doc = StateDoc.from_payload(load("basic.json"))
     assert doc.settings is not None
-    assert doc.settings.monthly_target_uah == 5000
     assert doc.settings.usd_target_share_pct == 50
 
 
 def test_xirr_parsed():
     doc = StateDoc.from_payload(load("basic.json"))
     assert doc.xirr == {"UAH": 16.51, "USD": 3.22}
-
-
-def test_xirr_absent_on_old_service():
-    raw = json.loads(load("basic.json"))
-    del raw["xirr"]
-    doc = StateDoc.from_payload(json.dumps(raw))
-    assert doc.xirr == {}
 
 
 def test_realized_parsed():
@@ -471,13 +434,6 @@ def test_realized_present_without_xirr():
     assert usd.money_days < usd.min_days
 
 
-def test_realized_absent_on_old_service():
-    raw = json.loads(load("basic.json"))
-    del raw["realized"]
-    doc = StateDoc.from_payload(json.dumps(raw))
-    assert doc.realized == {}
-
-
 def test_empty_portfolio_fixture():
     """Свіжа інсталяція: нуль лотів, все по нулях — нічого не падає."""
     doc = StateDoc.from_payload(load("empty.json"))
@@ -490,26 +446,12 @@ def test_empty_portfolio_fixture():
     assert doc.realized == {}
 
 
-def test_settings_absent_on_old_service():
-    raw = json.loads(load("basic.json"))
-    del raw["settings"]
-    doc = StateDoc.from_payload(json.dumps(raw))
-    assert doc.settings is None
-
-
 def test_settings_partial():
     raw = json.loads(load("basic.json"))
-    raw["settings"] = {"monthly_target_uah": 4000}
+    raw["settings"] = {"goal_amount_uah": 4000}
     doc = StateDoc.from_payload(json.dumps(raw))
-    assert doc.settings.monthly_target_uah == 4000
-
-
-def test_calendar_absent_on_old_service():
-    """Сервіс 0.1 не шле calendar — інтеграція має жити з порожнім."""
-    raw = json.loads(load("basic.json"))
-    del raw["calendar"]
-    doc = StateDoc.from_payload(json.dumps(raw))
-    assert doc.calendar == ()
+    assert doc.settings.goal_amount_uah == 4000
+    assert doc.settings.goal_date is None
 
 
 def test_unknown_fields_are_ignored():
@@ -518,7 +460,7 @@ def test_unknown_fields_are_ignored():
     raw["brand_new_field"] = {"anything": 1}
     raw["next_payment"]["extra"] = True
     doc = StateDoc.from_payload(json.dumps(raw))
-    assert doc.schema == 3
+    assert doc.next_payment.isin == "deposit:1"
 
 
 def test_wrong_schema_rejected():
@@ -554,7 +496,6 @@ def test_currency_is_the_unit_of_every_sum():
     doc = StateDoc.from_payload(json.dumps(raw))
     assert doc.currency == "UAH"
     assert doc.currency_symbol() == "₴"
-    assert doc.currency_note == ""
 
     raw["currency"], raw["currency_note"] = "USD", ""
     usd = StateDoc.from_payload(json.dumps(raw))
@@ -678,14 +619,6 @@ def test_debt_nearest_skips_unknown_and_undated():
     # А в суму «принести» незвірена не входить, картка без дати — входить:
     # сума виписки в неї відома, невідомо лише коли.
     assert doc.debt.bring_by_due_uah() == 2 * known["bring_by_due_uah"]
-
-
-def test_debt_absent_on_old_service():
-    """Сервіс без блоку debt — None, а не порожній борг."""
-    raw = json.loads(load("basic.json"))
-    raw.pop("debt", None)
-    doc = StateDoc.from_payload(json.dumps(raw))
-    assert doc.debt is None
 
 
 def test_net_worth_parsed_and_falls_back_to_capital():

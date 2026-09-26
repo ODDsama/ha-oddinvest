@@ -65,3 +65,21 @@ CARD_MARK_STALE_DAYS = 14
 # вважається «на носі». Сім, як у сервісі: там задача card-due-* саме з
 # цього дня переходить у «зараз».
 CARD_DUE_SOON_DAYS = 7
+
+# Перемикачі сповіщень і їхні типові значення — одним переліком на форму
+# опцій (config_flow) і на читання (alerts._opt). Кнопки в сповіщенні
+# типово вимкнені: їх розуміє лише mobile_app (довід — у alerts._send).
+NOTIFY_OPTIONS: dict[str, bool] = {
+    "notify_coupon": True,
+    "notify_reinvest": True,
+    "notify_tomorrow": True,
+    "notify_goal": True,
+    "notify_maturity": True,
+    "notify_stale": True,
+    "notify_concentration": True,
+    "notify_auction": True,
+    "notify_npf_contribution": True,
+    "notify_actions": False,
+    "notify_card_due": True,
+    "notify_card_stale": True,
+}

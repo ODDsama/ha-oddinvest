@@ -320,25 +320,7 @@
           "minimum": 0,
           "description": "За скільки років ставка сповзає до довгострокової (адитивне поле)"
         },
-        "goal_pessimistic_uah": {
-          "type": "number",
-          "minimum": 0,
-          "description": "Спадок моделі трьох цілей; лишається як запасне джерело для goal_amount_uah (адитивне поле)"
-        },
-        "goal_realistic_uah": {
-          "type": "number",
-          "minimum": 0,
-          "description": "Спадок моделі трьох цілей (адитивне поле)"
-        },
-        "goal_optimistic_uah": {
-          "type": "number",
-          "minimum": 0,
-          "description": "Спадок моделі трьох цілей (адитивне поле)"
-        },
-        "channels": {
-          "type": "string",
-          "description": "Канали купівлі через кому (mono, inzhur…)"
-        },
+
         "deposit_min_usd": {
           "type": "number",
           "minimum": 0,
@@ -387,7 +369,7 @@
         "monthly_expenses_uah": {
           "type": "number",
           "minimum": 0,
-          "description": "Ті самі витрати в гривні за СЬОГОДНІШНІМ курсом. ВИВЕДЕНЕ поле: від нього рахується достатність резерву, і всі споживачі чекають саме гривень. На базі, старшій за міграцію 0038, приходить зі спадкового ключа з тією ж назвою (адитивне поле)"
+          "description": "Ті самі витрати в гривні за СЬОГОДНІШНІМ курсом. ВИВЕДЕНЕ поле: від нього рахується достатність резерву, і всі споживачі чекають саме гривень. (адитивне поле)"
         },
         "reserve_target_months": {
           "type": "number",
@@ -686,7 +668,7 @@
           "title": { "type": "string", "description": "саме рішення, одним рядком" },
           "why": { "type": "string", "description": "чому воно тут" },
           "when": { "type": "string", "description": "дата, строк або головне число задачі" },
-          "action": { "type": "string", "enum": ["record-buy", "top-up-deposit", "fill-reserve", "record-npf", "confirm-payment", "record-receipt", "review-limits", "see-suggestions", "review-deposit", "how-to-fund", "confirm-route", "fill-goal", "pay-planned", "pay-card", "pay-debt", "review-rebalance"], "description": "семантичний ТОКЕН дії, а не підпис кнопки: маршрутизувати по перекладеній прозі означало б ламати посилання кожною редактурою. Порожньо, коли робити нічого не треба" },
+          "action": { "type": "string", "enum": ["record-buy", "top-up-deposit", "fill-reserve", "record-npf", "confirm-payment", "record-receipt", "review-limits", "see-suggestions", "review-deposit", "how-to-fund", "confirm-route", "fill-goal", "pay-planned", "pay-card", "review-rebalance"], "description": "семантичний ТОКЕН дії, а не підпис кнопки: маршрутизувати по перекладеній прозі означало б ламати посилання кожною редактурою. Порожньо, коли робити нічого не треба" },
           "amount_uah": { "type": "number", "description": "сума, про яку йдеться, грн-екв.: проза для людини, число для автоматизації" },
           "ref": { "type": "string", "description": "конкретний запис, якого задача стосується: deposit:<id> | goal:<id> | fund:<назва>. Порожньо — задача не про один запис (адитивне поле)" }
         },

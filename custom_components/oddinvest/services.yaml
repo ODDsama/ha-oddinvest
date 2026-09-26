@@ -1,8 +1,7 @@
+# Назви й описи сервісів і полів — у translations/*.json: вони там
+# перекладені й мають перевагу над цим файлом, тож копія тут лише
+# розходилась би з ними.
 refresh:
-  name: Оновити дані
-  description: >-
-    Оновити довідник паперів НБУ і курс валют на боці сервіса oddinvestd,
-    зробити знімок і републікувати стан у MQTT.
   fields:
     config_entry_id:
       # Який портфель. Порожньо — єдиний запис; із кількома записами без
@@ -13,10 +12,6 @@ refresh:
           integration: oddinvest
 
 mark_payment:
-  name: Позначити виплату
-  description: >-
-    Позначити виплату отриманою — тобто покласти гроші на рахунок, не
-    чекаючи опівночі, — або зняти позначку.
   fields:
     config_entry_id:
       required: false
@@ -24,14 +19,11 @@ mark_payment:
         config_entry:
           integration: oddinvest
     isin:
-      name: ISIN
-      description: Код паперу.
       required: true
       example: UA4000227748
       selector:
         text:
     pay_date:
-      name: Дата виплати
       required: true
       selector:
         date:
@@ -42,8 +34,6 @@ mark_payment:
       # внесками, і питати, який саме купон оплатив конкретний папір, —
       # те саме, що питати, яка саме крапля води в склянці з крана.
       # Простій тепер рахується сам (uninvested_uah).
-      name: Статус
-      description: received — гроші надійшли; none — зняти позначку.
       required: true
       selector:
         select:

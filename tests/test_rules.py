@@ -1,23 +1,19 @@
 """Правила сповіщень і календаря — без HA."""
 
-import importlib.util
-import pathlib
 from datetime import date, datetime, timedelta, timezone
 
-_PATH = pathlib.Path(__file__).parents[1] / "custom_components" / "oddinvest" / "rules.py"
-_spec = importlib.util.spec_from_file_location("oddinvest_rules", _PATH)
-rules = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(rules)
+from . import load_module
+
+rules = load_module("rules")
 
 
 def test_month_key_sent_once_per_month():
     """Ключ із місяцем, надісланий першого числа, стоїть до кінця місяця:
     доти перевірка «надіслано сьогодні» пропускала його щодня."""
     sent = {"npf:2026-09": "2026-09-01"}
-    assert rules.already_sent(sent, "npf:2026-09")
     kept = rules.prune_sent(sent, date(2026, 9, 30))
-    assert rules.already_sent(kept, "npf:2026-09")
-    assert not rules.already_sent(kept, "npf:2026-10")
+    assert "npf:2026-09" in kept
+    assert "npf:2026-10" not in kept
 
 
 def test_prune_forgets_old_keys():
