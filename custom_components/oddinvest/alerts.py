@@ -14,40 +14,26 @@ from datetime import timedelta
 from typing import Any
 
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .actions import received_action
-from .const import CARD_MARK_STALE_DAYS, DOMAIN, NOTIFY_OPTIONS, SIGNAL_STATE_UPDATED, STALE_AFTER_H
+from .const import CARD_MARK_STALE_DAYS, DOMAIN, NOTIFY_OPTIONS, STALE_AFTER_H
 from .rules import payment_key, prune_sent
 
 _LOGGER = logging.getLogger(__name__)
 
+# Версія 2 — {"sent": ..., "ready": ..., "auction": ...}. Перехід із
+# пласкої мапи версії 1 прибрано: сховища першої версії не лишилось.
 STORE_VERSION = 2
-
-
-class _NotifyStore(Store):
-    """Сховище дедупу зі зміненою формою даних.
-
-    Версія 1 тримала пласку мапу «ключ → дата надсилання». Версія 2
-    загортає її в {"sent": ..., "ready": ...}, бо тут зʼявилось друге,
-    геть інше за природою: множина валют, на яких реінвест уже був
-    можливий минулого разу.
-    """
-
-    async def _async_migrate_func(self, old_major_version, old_minor_version, old_data):
-        if old_major_version == 1:
-            return {"sent": old_data or {}, "ready": [], "auction": ""}
-        return old_data
 
 
 class NotificationManager:
     def __init__(self, hass: HomeAssistant, entry) -> None:
         self._hass = hass
         self._entry = entry
-        self._store = _NotifyStore(hass, STORE_VERSION, f"{DOMAIN}_notify_{entry.entry_id}")
+        self._store = Store(hass, STORE_VERSION, f"{DOMAIN}_notify_{entry.entry_id}")
         self._sent: dict[str, str] = {}
         # Стан «на що вже вистачало» ПЕРЕЖИВАЄ перезапуск.
         #
@@ -60,7 +46,6 @@ class NotificationManager:
         self._prev_ready: set[str] = set()
         # Дата найсвіжішого аукціону, про який уже сповіщали.
         self._last_auction: str = ""
-        self._unsubs: list = []
         # Оцінки йдуть по одній. Їх запускають і MQTT-апдейт, і добовий
         # таймер, і дві паралельні бачили той самий журнал до запису —
         # обидві слали те саме повідомлення.
@@ -73,17 +58,12 @@ class NotificationManager:
         self._sent = dict(data.get("sent") or {})
         self._prev_ready = set(data.get("ready") or ())
         self._last_auction = str(data.get("auction") or "")
-        self._unsubs.append(
-            async_dispatcher_connect(self._hass, SIGNAL_STATE_UPDATED, self._on_state)
+        # На кожен новий документ і раз на добу. Знімає обидва слухачі сам
+        # HA при вивантаженні запису.
+        self._entry.async_on_unload(self._entry.runtime_data.async_add_listener(self._kick))
+        self._entry.async_on_unload(
+            async_track_time_change(self._hass, self._kick, hour=9, minute=5, second=0)
         )
-        self._unsubs.append(
-            async_track_time_change(self._hass, self._on_daily, hour=9, minute=5, second=0)
-        )
-
-    def async_unload(self) -> None:
-        for u in self._unsubs:
-            u()
-        self._unsubs.clear()
 
     @property
     def _service(self) -> str:
@@ -102,11 +82,7 @@ class NotificationManager:
         return {"action": "URI", "title": title, "uri": uri}
 
     @callback
-    def _on_state(self) -> None:
-        self._hass.async_create_task(self._evaluate())
-
-    @callback
-    def _on_daily(self, now) -> None:
+    def _kick(self, _now=None) -> None:
         self._hass.async_create_task(self._evaluate())
 
     async def _evaluate(self) -> None:

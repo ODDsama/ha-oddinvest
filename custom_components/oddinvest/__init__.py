@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
 
 import aiohttp
 from homeassistant.components import mqtt
@@ -16,7 +15,7 @@ from homeassistant.exceptions import (
 )
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import (
     CONF_BASE_URL,
@@ -26,8 +25,6 @@ from .const import (
     DOMAIN,
     SERVICE_MARK_PAYMENT,
     SERVICE_REFRESH,
-    SIGNAL_AVAILABILITY,
-    SIGNAL_STATE_UPDATED,
 )
 from .actions import parse_received, pick_targets, rest_headers
 from .alerts import NotificationManager
@@ -40,22 +37,38 @@ PLATFORMS = ["sensor", "binary_sensor", "calendar", "button", "number", "date"]
 type OddInvestConfigEntry = ConfigEntry[OddInvestData]
 
 
-@dataclass
-class OddInvestData:
-    """Спільний стан інтеграції для всіх платформ."""
+class OddInvestData(DataUpdateCoordinator[StateDoc | None]):
+    """Спільний стан інтеграції для всіх платформ.
 
-    base_url: str
-    prefix: str
-    # token — Bearer для REST, коли на сервісі стоїть замок; порожньо =
-    # без заголовка (сервіс без пароля). Довід у const.py.
-    token: str = ""
-    # portfolio — slug НЕ головного портфеля; порожньо = головний. Довід —
-    # у const.py (CONF_PORTFOLIO).
-    portfolio: str = ""
-    state: StateDoc | None = None
-    available: bool = False
-    unsubscribers: list = field(default_factory=list)
-    alerts: object | None = None
+    Координатор без опитування (update_interval немає): документ ПРИХОДИТЬ
+    з MQTT, і state_received кладе його сюди async_set_updated_data. Доти
+    те саме робили два глобальні сигнали dispatcher-а з назвою на весь
+    домен — тобто з двома портфелями кожна сутність кожного запису
+    перемальовувалась на оновлення будь-якого з них, — плюс список
+    відписок, який треба було не забути пройти при вивантаженні.
+    """
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        super().__init__(hass, _LOGGER, config_entry=entry, name=f"{DOMAIN} {entry.title}")
+        self.base_url: str = entry.data[CONF_BASE_URL].rstrip("/")
+        self.prefix: str = entry.data[CONF_TOPIC_PREFIX]
+        # token — Bearer для REST, коли на сервісі стоїть замок; порожньо =
+        # без заголовка (сервіс без пароля). Довід у const.py.
+        self.token = str(entry.data.get(CONF_TOKEN, ""))
+        # portfolio — slug НЕ головного портфеля; порожньо = головний.
+        # Довід — у const.py (CONF_PORTFOLIO).
+        self.portfolio = str(entry.data.get(CONF_PORTFOLIO, ""))
+        # available — LWT сервіса («online»/«offline»), окремо від того, чи
+        # документ уже приходив.
+        self.available = False
+
+    @property
+    def state(self) -> StateDoc | None:
+        return self.data
+
+    async def _async_update_data(self) -> StateDoc | None:
+        # Тягнути нічого: ручне «оновити сутність» лишає те, що вже прийшло.
+        return self.data
 
     @property
     def open_url(self) -> str:
@@ -76,12 +89,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: OddInvestConfigEntry) ->
     if not await mqtt.async_wait_for_mqtt_client(hass):
         raise ConfigEntryNotReady("MQTT-інтеграція недоступна")
 
-    data = OddInvestData(
-        base_url=entry.data[CONF_BASE_URL].rstrip("/"),
-        prefix=entry.data[CONF_TOPIC_PREFIX],
-        token=str(entry.data.get(CONF_TOKEN, "")),
-        portfolio=str(entry.data.get(CONF_PORTFOLIO, "")),
-    )
+    data = OddInvestData(hass, entry)
     entry.runtime_data = data
 
     issue_id = f"unsupported_schema_{entry.entry_id}"
@@ -95,7 +103,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: OddInvestConfigEntry) ->
             _LOGGER.info("Стан %s стерто сервісом — портфель видалено?", msg.topic)
             return
         try:
-            data.state = StateDoc.from_payload(msg.payload)
+            doc = StateDoc.from_payload(msg.payload)
         except SchemaMismatch as err:
             # У «Ремонти», а не лише в журнал: сутності від цього мовчки
             # замерзають на останньому значенні, і шукати причину в лозі —
@@ -115,28 +123,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: OddInvestConfigEntry) ->
             _LOGGER.error("Повідомлення %s не відповідає контракту: %s", msg.topic, err)
             return
         ir.async_delete_issue(hass, DOMAIN, issue_id)
-        async_dispatcher_send(hass, SIGNAL_STATE_UPDATED)
+        data.async_set_updated_data(doc)
 
     @callback
     def availability_received(msg: mqtt.ReceiveMessage) -> None:
         data.available = msg.payload == "online"
-        async_dispatcher_send(hass, SIGNAL_AVAILABILITY)
+        data.async_update_listeners()
 
     # retained-повідомлення прилетять одразу після підписки
-    data.unsubscribers.append(
-        await mqtt.async_subscribe(hass, f"{data.prefix}/state", state_received, qos=1)
-    )
-    data.unsubscribers.append(
-        await mqtt.async_subscribe(
-            hass, f"{data.prefix}/availability", availability_received, qos=1
+    for topic, handler in (("state", state_received), ("availability", availability_received)):
+        entry.async_on_unload(
+            await mqtt.async_subscribe(hass, f"{data.prefix}/{topic}", handler, qos=1)
         )
-    )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _register_services(hass)
 
-    data.alerts = NotificationManager(hass, entry)
-    await data.alerts.async_setup()
+    await NotificationManager(hass, entry).async_setup()
     entry.async_on_unload(entry.add_update_listener(_options_updated))
     return True
 
@@ -147,11 +150,7 @@ async def _options_updated(hass: HomeAssistant, entry: OddInvestConfigEntry) -> 
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: OddInvestConfigEntry) -> bool:
-    if entry.runtime_data.alerts is not None:
-        entry.runtime_data.alerts.async_unload()
-    for unsub in entry.runtime_data.unsubscribers:
-        unsub()
-    entry.runtime_data.unsubscribers.clear()
+    # Підписки MQTT і слухачі сповіщень знімає сам HA (entry.async_on_unload).
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
@@ -271,13 +270,8 @@ def _register_services(hass: HomeAssistant) -> None:
             return
         entry_id, isin, pay_date = parsed
         body = {"isin": isin, "pay_date": pay_date, "status": "received"}
-        # Кнопка несе свій запис — і йде лише в нього. Кнопка старого
-        # формату (без запису) вже лежить на телефонах: вона, як і доти,
-        # іде в усі записи — інакше натискання мовчки не робило б нічого.
-        entries = _loaded_entries(hass)
-        if entry_id:
-            entries = [e for e in entries if e.entry_id == entry_id]
-        for entry in entries:
+        # Кнопка несе свій запис — і йде лише в нього.
+        for entry in (e for e in _loaded_entries(hass) if e.entry_id == entry_id):
             try:
                 await _mark_payment(hass, entry.runtime_data, body)
             except HomeAssistantError as err:

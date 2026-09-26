@@ -3,19 +3,18 @@
 from __future__ import annotations
 
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.entity import Entity
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, SIGNAL_AVAILABILITY, SIGNAL_STATE_UPDATED
+from .const import DOMAIN
 
 
-class OddInvestEntity(Entity):
-    """Сутність, що живиться зі спільного OddInvestData через dispatcher."""
+class OddInvestEntity(CoordinatorEntity):
+    """Сутність, що живиться зі спільного координатора OddInvestData."""
 
     _attr_has_entity_name = True
-    _attr_should_poll = False
 
     def __init__(self, data, entry_id: str, key: str) -> None:
+        super().__init__(data)
         self._data = data
         self._attr_unique_id = f"{entry_id}_{key}"
         self._attr_device_info = DeviceInfo(
@@ -30,14 +29,6 @@ class OddInvestEntity(Entity):
             # тунелю, дійде сюди після перезавантаження запису — а от
             # посилання у сповіщеннях (alerts._open) беруть її щоразу.
             configuration_url=data.open_url,
-        )
-
-    async def async_added_to_hass(self) -> None:
-        self.async_on_remove(
-            async_dispatcher_connect(self.hass, SIGNAL_STATE_UPDATED, self.async_write_ha_state)
-        )
-        self.async_on_remove(
-            async_dispatcher_connect(self.hass, SIGNAL_AVAILABILITY, self.async_write_ha_state)
         )
 
     @property

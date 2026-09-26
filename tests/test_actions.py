@@ -16,14 +16,10 @@ def test_received_keeps_synthetic_isin_with_colon():
     assert actions.parse_received(a) == ("01JABC", "deposit:7", "2026-07-18")
 
 
-def test_received_legacy_button_without_entry():
-    """Кнопка зі старого сповіщення (до запису в ідентифікаторі) читається й
-    далі — із порожнім записом: її вже доставлено на телефон."""
-    assert actions.parse_received("oi_received:deposit:7:2026-07-18") == (
-        "",
-        "deposit:7",
-        "2026-07-18",
-    )
+def test_received_legacy_button_ignored():
+    """Кнопку старого формату (без запису) не розбираємо: вона йшла в усі
+    записи разом."""
+    assert actions.parse_received("oi_received:deposit:7:2026-07-18") is None
 
 
 def test_pick_targets():

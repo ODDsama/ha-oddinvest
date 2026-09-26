@@ -20,14 +20,11 @@ CONF_TOKEN = "token"
 # CONF_PORTFOLIO — slug портфеля, коли запис дивиться НЕ на головний
 # (MQTT-префікс «<prefix>/<slug>»). Порожньо = головний: так поводились усі
 # записи доти, і міграції не треба — читається через entry.data.get(...).
-# Сервіс розрізняє портфелі заголовком X-Portfolio (rest.py); без нього дії
+# Сервіс розрізняє портфелі заголовком X-Portfolio (actions.rest_headers); без нього дії
 # («Отримано», «Оновити») з запису другого портфеля міняли б головний.
 CONF_PORTFOLIO = "portfolio"
 
 DEFAULT_PREFIX = "oddinvest"
-
-SIGNAL_STATE_UPDATED = f"{DOMAIN}_state_updated"
-SIGNAL_AVAILABILITY = f"{DOMAIN}_availability"
 
 # SUPPORTED_SCHEMA тут НЕМАЄ навмисно — вона живе в models.py, поруч із
 # єдиним місцем, яке її звіряє (StateDoc.from_payload). Дубль стояв саме

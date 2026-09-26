@@ -41,17 +41,14 @@ def received_action(isin: str, pay_date: str, entry_id: str) -> str:
 def parse_received(action: str) -> tuple[str, str, str] | None:
     """(entry_id, isin, pay_date) з рядка дії або None, якщо це не наша кнопка.
 
-    entry_id порожній для кнопки старого формату («oi_received:isin:дата»):
-    такі сповіщення вже лежать на телефонах, і вони мусять працювати й далі.
+    Кнопок старого формату («oi_received:isin:дата», без запису) більше не
+    розбираємо: вони йшли в усі записи разом, а сповіщення з ними давно
+    зʼїхали з телефонів.
     """
-    entry = ""
-    if action.startswith(ACTION_RECEIVED + "@"):
-        entry, sep, body = action[len(ACTION_RECEIVED) + 1 :].partition(":")
-        if not sep or not entry:
-            return None
-    elif action.startswith(ACTION_RECEIVED + ":"):
-        body = action[len(ACTION_RECEIVED) + 1 :]
-    else:
+    if not action.startswith(ACTION_RECEIVED + "@"):
+        return None
+    entry, sep, body = action[len(ACTION_RECEIVED) + 1 :].partition(":")
+    if not sep or not entry:
         return None
     isin, sep, pay_date = body.rpartition(":")
     if not sep or not isin or len(pay_date) != 10:
