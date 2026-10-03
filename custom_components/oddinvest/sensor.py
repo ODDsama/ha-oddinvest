@@ -165,7 +165,7 @@ def _liquidity_attrs(doc: StateDoc) -> dict[str, Any] | None:
     # найближчу дату, тобто вклад, а більша частина замкненого може бути
     # пенсійною й недоступною ще двадцять пʼять років.
     return {
-        "now_uah": lq.now_uah,
+        "available_now_uah": lq.available_now_uah,
         "in_90_uah": lq.in_90_uah,
         "reserve_uah": lq.reserve_uah,
         "goals_uah": lq.goals_uah,
@@ -205,23 +205,6 @@ def _delta_attrs(doc: StateDoc) -> dict[str, Any] | None:
         "from_uah": d.from_uah,
         "delta_pct": d.delta_pct,
         "contributed_uah": d.contributed_uah,
-    }
-
-
-def _idle_attrs(doc: StateDoc) -> dict[str, Any] | None:
-    """Скільки лежить і відколи — поруч із ціною: «−45 ₴/міс» без суми й
-    дати не каже, що з цим робити."""
-    i = doc.idle
-    if i is None:
-        return None
-    c = doc.idle_cost
-    return {
-        "investable_uah": i.investable_uah,
-        "since": i.since,
-        "days": i.days,
-        "cost_so_far_uah": c.cost_so_far_uah if c else None,
-        "rate_pct": c.rate_pct if c else None,
-        "rate_label": c.rate_label if c else "",
     }
 
 
@@ -352,15 +335,9 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         suggested_display_precision=0,
         value_fn=lambda d: d.uninvested_uah,
     ),
-    OddInvestSensorDescription(
-        key="account_uah",
-        translation_key="account_uah",
-        native_unit_of_measurement="UAH",
-        device_class=SensorDeviceClass.MONETARY,
-        state_class=SensorStateClass.TOTAL,
-        suggested_display_precision=0,
-        value_fn=lambda d: d.account_uah,
-    ),
+    # account_uah (гроші на рахунках брокерів) прибрано в schema 4: рахунків
+    # застосунок не веде. Сирота в реєстрі сутностей прибирається при
+    # старті запису (__init__.REMOVED_ENTITIES).
     OddInvestSensorDescription(
         key="total_capital_uah",
         translation_key="total_capital_uah",
@@ -368,9 +345,10 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=0,
-        # Капітал — усе, що в тебе є: папери, гроші, сертифікати фондів,
-        # тіло банківських вкладів, резерв, цілі накопичення й пенсійні
-        # активи. Резерв входить попри те, що не працює: це твої гроші, і
+        # Капітал — усе, що в тебе є: папери, сертифікати фондів, тіло
+        # банківських вкладів, резерв, цілі накопичення й пенсійні активи.
+        # Готівки на рахунках брокерів тут із schema 4 немає: рахунків
+        # застосунок не веде, і число без неї — не недолік, а правда. Резерв входить попри те, що не працює: це твої гроші, і
         # вони або в капіталі, або ніде. Цілі — з того самого доводу, хоч їх
         # і витратять: доки річ не куплена, гроші лежать у тебе. НПФ — попри
         # те, що забрати його не можна до 50 років: капітал відповідає на
@@ -474,8 +452,8 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         # сума. TOTAL змусив би HA рахувати з нього приріст.
         #
         # І тому БЕЗ device_class MONETARY — у всіх таких сенсорів тут (темп,
-        # пилка накопиченого купона, ліквідність, дельта, простій, «принести
-        # до дати»): HA допускає для MONETARY лише TOTAL і на MEASUREMENT
+        # пилка накопиченого купона, ліквідність, дельта, «принести до
+        # дати»): HA допускає для MONETARY лише TOTAL і на MEASUREMENT
         # пише попередження в журнал на кожен старт. Одиниця UAH лишається.
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
@@ -550,23 +528,9 @@ SENSORS: tuple[OddInvestSensorDescription, ...] = (
         value_fn=lambda d: d.capital_delta_30.delta_uah if d.capital_delta_30 else None,
         attrs_fn=_delta_attrs,
     ),
-    # Простій: що коштує на місяць лежання вільних грошей понад квиток.
-    # Стан — ціна, а не сума: сума й так є в account_uah, а тут питання
-    # «скільки я втрачаю». Нуль — коли простій є (idle), а поради для цих
-    # грошей немає: лежати лежить, а ціни не з чого взяти; unknown — коли
-    # простою немає взагалі. Атрибути (сума, відколи) дають зрозуміти, який
-    # із випадків перед тобою.
-    OddInvestSensorDescription(
-        key="idle_cost_month_uah",
-        translation_key="idle_cost_month_uah",
-        native_unit_of_measurement="UAH",
-        state_class=SensorStateClass.MEASUREMENT,
-        suggested_display_precision=0,
-        value_fn=lambda d: (
-            (d.idle_cost.cost_month_uah if d.idle_cost else 0.0) if d.idle else None
-        ),
-        attrs_fn=_idle_attrs,
-    ),
+    # idle_cost_month_uah (ціна простою вільних грошей брокера) прибрано в
+    # schema 4 разом із рахунками: простій міряв залишок рахунку проти
+    # квитка. Виплата, за якою ще не купили, — це uninvested_uah.
     OddInvestSensorDescription(
         key="debt_total_uah",
         translation_key="debt_total_uah",

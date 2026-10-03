@@ -206,7 +206,7 @@ def test_nested_objects_parsed():
     assert isinstance(doc.independence.plan_months, int)
 
     assert doc.liquidity is not None
-    assert doc.liquidity.in_30_uah == 95637.5
+    assert doc.liquidity.in_30_uah == 94137.5
     assert doc.liquidity.locked_uah == 120000
 
     assert doc.reserve is not None
@@ -229,7 +229,7 @@ def test_nested_object_ignores_unknown_fields():
     raw = json.loads(load("basic.json"))
     raw["liquidity"]["in_7_uah"] = 123.45
     doc = StateDoc.from_payload(json.dumps(raw))
-    assert doc.liquidity.in_30_uah == 95637.5
+    assert doc.liquidity.in_30_uah == 94137.5
 
 
 def test_empty_fixture_has_no_nested_objects():
@@ -466,13 +466,14 @@ def test_unknown_fields_are_ignored():
 def test_wrong_schema_rejected():
     """Чужа мажорна версія — відмова, і в ОБИДВА боки.
 
-    Число тут навмисно НЕ «на одиницю більше»: 4 стереже майбутнє, 2 —
-    минуле. Друге важливіше: після інкременту 2 → 3 стара публікація з
+    Число тут навмисно НЕ «на одиницю більше»: 5 стереже майбутнє, 3 —
+    минуле. Друге важливіше: після інкременту 3 → 4 стара публікація з
     ретейненого топіка (а вона лежить у брокері, доки її не перезапишуть)
-    мусить бути відкинута, а не розібрана як нова — її суми гривневі, а
-    одиницю сенсор бере з currency, і читати їх як долари не можна.
+    мусить бути відкинута, а не розібрана як нова — її капітал рахує
+    готівку рахунків, якої в schema 4 немає, і графік капіталу стрибнув би
+    на суму рахунку туди й назад.
     """
-    for bad in (2, 4):
+    for bad in (3, 5):
         raw = json.loads(load("basic.json"))
         raw["schema"] = bad
         with pytest.raises(ContractError, match=f"schema={bad}"):
@@ -662,24 +663,24 @@ def test_public_url_comes_from_document():
     assert plain.settings is not None and plain.settings.public_url is None
 
 
-def test_idle_parsed():
-    """Простій — двома блоками: факт (idle) і ціна (idle_cost). Обидва
-    необовʼязкові й незалежні: простій без поради — законний стан."""
-    doc = StateDoc.from_payload(load("basic.json"))
-    assert doc.idle is not None
-    assert doc.idle.investable_uah == 12000
-    assert doc.idle.since == "2026-06-20"
-    assert doc.idle.days == 25
-    assert doc.idle_cost is not None
-    assert doc.idle_cost.cost_month_uah == 98.4
-    assert doc.idle_cost.rate_label == "UA4000227748"
+def test_accounts_gone_in_schema_4():
+    """Рахунків у schema 4 немає — і парсер про них не памʼятає.
 
+    Не лише фікстура без полів (вона й так їх не має), а й документ, у
+    якого вони раптом є: невідоме поле ігнорується, і жоден атрибут
+    StateDoc не воскресає. Ловить напівзроблений відкат — коли поле
+    повернули в дата-клас, а сенсора вже немає, і число тихо їздить
+    в нікуди.
+    """
     raw = json.loads(load("basic.json"))
-    raw.pop("idle_cost", None)
-    only_fact = StateDoc.from_payload(json.dumps(raw))
-    assert only_fact.idle is not None and only_fact.idle_cost is None
-    raw.pop("idle", None)
-    assert StateDoc.from_payload(json.dumps(raw)).idle is None
+    raw.update(account_uah=5000, accounts={"UAH": 5000}, idle={"investable_uah": 1})
+    raw["liquidity"]["now_uah"] = 5000
+    doc = StateDoc.from_payload(json.dumps(raw))
+    for gone in ("account_uah", "accounts", "reinvest_min", "reinvest_min_uah", "idle"):
+        assert not hasattr(doc, gone), gone
+    assert not hasattr(doc.liquidity, "now_uah")
+    # Що під рукою сьогодні, тепер каже available_now_uah: подушка + цілі.
+    assert doc.liquidity.available_now_uah == 90000
 
 
 def test_schema_mismatch_carries_versions_for_repairs():

@@ -13,6 +13,7 @@ from homeassistant.exceptions import (
     HomeAssistantError,
     ServiceValidationError,
 )
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
@@ -35,6 +36,23 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["sensor", "binary_sensor", "calendar", "button", "number", "date"]
 
 type OddInvestConfigEntry = ConfigEntry[OddInvestData]
+
+# Сутності, яких інтеграція більше не створює: (платформа, ключ unique_id).
+#
+# HA сам записів реєстру не прибирає — сутність, яку платформа перестала
+# додавати, лишається в ньому назавжди «недоступною», з тим самим іменем і
+# з усіма автоматизаціями, що на неї дивляться. Людина бачила б сірий
+# «Рахунок» і не знала б, що він не зламався, а пішов. Тому сироти
+# прибираються при кожному старті запису: дешево, ідемпотентно, і
+# наздоганяє запис, який пропустив кілька версій.
+#
+# schema 4 (2026-10-03): рахунків брокерів застосунок більше не веде, і з
+# ними пішли баланс рахунку, ціна простою та «можна реінвестувати».
+REMOVED_ENTITIES: tuple[tuple[str, str], ...] = (
+    ("sensor", "account_uah"),
+    ("sensor", "idle_cost_month_uah"),
+    ("binary_sensor", "reinvest_ready"),
+)
 
 
 class OddInvestData(DataUpdateCoordinator[StateDoc | None]):
@@ -136,12 +154,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: OddInvestConfigEntry) ->
             await mqtt.async_subscribe(hass, f"{data.prefix}/{topic}", handler, qos=1)
         )
 
+    _remove_orphans(hass, entry)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _register_services(hass)
 
     await NotificationManager(hass, entry).async_setup()
     entry.async_on_unload(entry.add_update_listener(_options_updated))
     return True
+
+
+def _remove_orphans(hass: HomeAssistant, entry: OddInvestConfigEntry) -> None:
+    """Прибрати з реєстру сутності з REMOVED_ENTITIES. unique_id будується
+    так само, як в OddInvestEntity: «<entry_id>_<ключ>»."""
+    reg = er.async_get(hass)
+    for platform, key in REMOVED_ENTITIES:
+        entity_id = reg.async_get_entity_id(platform, DOMAIN, f"{entry.entry_id}_{key}")
+        if entity_id is not None:
+            _LOGGER.info("Прибрано сутність, якої більше немає: %s", entity_id)
+            reg.async_remove(entity_id)
 
 
 async def _options_updated(hass: HomeAssistant, entry: OddInvestConfigEntry) -> None:
@@ -244,7 +274,7 @@ def _register_services(hass: HomeAssistant) -> None:
         0017 і від того часу відповідає на нього помилкою. Аргумент
         записаний у самій міграції, коротко — купон на 82 ₴ не купує
         нічого, тож у покупку він потрапляє змішаним із власними
-        внесками, і простій тепер рахується сам."""
+        внесками, а «не перевкладено» тепер рахується само (uninvested_uah)."""
         body = {
             "isin": call.data["isin"],
             "pay_date": str(call.data["pay_date"]),

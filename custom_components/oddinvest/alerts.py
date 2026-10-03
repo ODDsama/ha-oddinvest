@@ -24,8 +24,13 @@ from .rules import payment_key, prune_sent
 
 _LOGGER = logging.getLogger(__name__)
 
-# Версія 2 — {"sent": ..., "ready": ..., "auction": ...}. Перехід із
-# пласкої мапи версії 1 прибрано: сховища першої версії не лишилось.
+# Версія 2 — {"sent": ..., "auction": ...}. Перехід із пласкої мапи версії 1
+# прибрано: сховища першої версії не лишилось.
+#
+# Ключ "ready" (на що вже вистачало грошей рахунку) пішов разом зі
+# сповіщенням notify_reinvest у schema 4, а версія лишилась ДРУГОЮ навмисно:
+# зайвий ключ у старому файлі просто не читається, а інкремент без функції
+# міграції Store зустрів би той самий файл помилкою.
 STORE_VERSION = 2
 
 
@@ -35,16 +40,9 @@ class NotificationManager:
         self._entry = entry
         self._store = Store(hass, STORE_VERSION, f"{DOMAIN}_notify_{entry.entry_id}")
         self._sent: dict[str, str] = {}
-        # Стан «на що вже вистачало» ПЕРЕЖИВАЄ перезапуск.
-        #
-        # Симптом був точковий, і саме тому довго лишався непоміченим. Ключ
-        # дедупу в _send — "reinvest:{валюта}:{сьогодні}", тож перезапуск у
-        # ТОЙ САМИЙ день нічого не дублював. Повторно стріляла ПЕРША оцінка
-        # нової доби після перезапуску: у памʼяті множина порожня, різниця
-        # ready - _prev_ready дорівнює всій множині, і людина діставала
-        # «вистачає на реінвестицію» про гроші, які лежать там тижнями.
-        self._prev_ready: set[str] = set()
-        # Дата найсвіжішого аукціону, про який уже сповіщали.
+        # Дата найсвіжішого аукціону, про який уже сповіщали. ПЕРЕЖИВАЄ
+        # перезапуск: інакше перша оцінка після нього вважала б найсвіжіший
+        # аукціон новим і повторювала б сповіщення про вже сказане.
         self._last_auction: str = ""
         # Оцінки йдуть по одній. Їх запускають і MQTT-апдейт, і добовий
         # таймер, і дві паралельні бачили той самий журнал до запису —
@@ -56,7 +54,6 @@ class NotificationManager:
             return  # сповіщення вимкнено (сервіс не заданий)
         data = await self._store.async_load() or {}
         self._sent = dict(data.get("sent") or {})
-        self._prev_ready = set(data.get("ready") or ())
         self._last_auction = str(data.get("auction") or "")
         # На кожен новий документ і раз на добу. Знімає обидва слухачі сам
         # HA при вивантаженні запису.
@@ -99,23 +96,10 @@ class NotificationManager:
         today_s = today.isoformat()
         tomorrow_s = (today + timedelta(days=1)).isoformat()
 
-        if self._opt("notify_reinvest"):
-            ready = {c for c, m in st.reinvest_min.items() if m > 0 and st.accounts.get(c, 0) >= m}
-            # «Вже вистачало» — лише для тих, про кого повідомлення ПІШЛО:
-            # валюта, чиє сповіщення не надіслалось, лишається новою й
-            # пробується знову, а не зникає мовчки.
-            now_ready = ready & self._prev_ready
-            for c in sorted(ready - self._prev_ready):
-                bal = st.accounts.get(c, 0)
-                if await self._send(
-                    f"reinvest:{c}:{today_s}",
-                    f"💰 На {c}-рахунку вистачає на реінвестицію ({bal:,.0f} {c}).",
-                    actions=[self._open("Що купити", "work/buy/main")],
-                ):
-                    now_ready.add(c)
-            if now_ready != self._prev_ready:
-                self._prev_ready = now_ready
-                await self._persist()
+        # notify_reinvest («на рахунку вистачає на реінвестицію») прибрано в
+        # schema 4: рахунків застосунок більше не веде, і порівнювати баланс
+        # із квитком нема з чим. Що виплата чекає покупки, сервіс тепер
+        # каже задачею в черзі (tasks, id "buy-best"), а не сповіщенням тут.
 
         # p.title() всюди замість p.isin: вклад ходить у розкладі під
         # синтетичним "deposit:7", і сповіщення «виплата по deposit:7»
@@ -297,19 +281,14 @@ class NotificationManager:
             return False
         today = dt_util.now().date()
         self._sent[key] = today.isoformat()
-        # Відсічка стосується ЛИШЕ журналу надісланого. Множина «на що вже
-        # вистачало» і дата останнього аукціону віку не мають: вони
-        # описують стан, а не подію, і зістарити їх означало б повернути
-        # той самий повтор після перезапуску. Відсічка довша за місяць —
+        # Відсічка стосується ЛИШЕ журналу надісланого. Дата останнього
+        # аукціону віку не має: вона описує стан, а не подію, і зістарити її
+        # означало б повернути той самий повтор після перезапуску. Відсічка довша за місяць —
         # місячний ключ мусить дожити до кінця свого місяця (rules).
         self._sent = prune_sent(self._sent, today)
         await self._persist()
         return True
 
     async def _persist(self) -> None:
-        data: dict[str, Any] = {
-            "sent": self._sent,
-            "ready": sorted(self._prev_ready),
-            "auction": self._last_auction,
-        }
+        data: dict[str, Any] = {"sent": self._sent, "auction": self._last_auction}
         await self._store.async_save(data)

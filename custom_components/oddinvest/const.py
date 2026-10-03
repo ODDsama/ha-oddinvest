@@ -66,9 +66,11 @@ CARD_DUE_SOON_DAYS = 7
 # Перемикачі сповіщень і їхні типові значення — одним переліком на форму
 # опцій (config_flow) і на читання (alerts._opt). Кнопки в сповіщенні
 # типово вимкнені: їх розуміє лише mobile_app (довід — у alerts._send).
+# notify_reinvest прибрано в schema 4 разом із рахунками (довід — у
+# alerts._evaluate_locked); збережене в опціях старого запису значення
+# ніхто більше не читає, і воно нікому не шкодить.
 NOTIFY_OPTIONS: dict[str, bool] = {
     "notify_coupon": True,
-    "notify_reinvest": True,
     "notify_tomorrow": True,
     "notify_goal": True,
     "notify_maturity": True,

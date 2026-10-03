@@ -39,7 +39,17 @@ from typing import Any
 # саме звідти сенсори беруть одиницю. Поля лише для гривні (реальна
 # дохідність, ІСЦ, цілі «у майбутніх грошах») при валюті ≠ UAH можуть
 # бути порожніми.
-SUPPORTED_SCHEMA = 3
+# 4 (2026-10-03): рахунків брокерів більше немає — власник їх не веде, і
+# застосунок перестав удавати, що знає, скільки там лежить. Із документа
+# зникли account_uah, accounts, reinvest_min(_uah), brokers, idle,
+# idle_cost, month_withdrawn_uah, liquidity.now_uah і готівкові поля рядка
+# ребалансу. Читачі були лише в перших шести (і в now_uah) — разом із ними
+# пішли сенсори account_uah і idle_cost_month_uah, бінарний reinvest_ready і
+# сповіщення notify_reinvest. Змінився й СЕНС полів, які лишились:
+# capital_uah і net_worth_uah — без готівки на рахунках; uninvested_uah —
+# виплати, за якими ще не було покупки, без стелі «скільки лежить на
+# рахунку».
+SUPPORTED_SCHEMA = 4
 
 # Книжкова валюта: у ній сервіс веде облік і в ній документ приходить, поки
 # валюти звітності не задано. Символи — для прози сповіщень.
@@ -132,17 +142,17 @@ class Independence:
 class Liquidity:
     """Коли гроші стають доступні — питання не про дохідність.
 
-    reserve_uah окремо від now_uah навмисно: на боці сервіса на цьому
-    тримається інваріант now_uah == account_uah.
+    now_uah (гроші на рахунках) пішло разом із рахунками в schema 4. Що
+    під рукою сьогодні, тепер каже available_now_uah: готівка подушки плюс
+    відкладене під цілі — і більше нічого, бо рахунків застосунок не веде.
     """
 
-    now_uah: float = 0.0
+    available_now_uah: float = 0.0
     in_30_uah: float = 0.0
     in_90_uah: float = 0.0
     reserve_uah: float = 0.0
-    # goals_uah — гроші під цілями накопичення. Так само окремо від
-    # now_uah і так само не в locked_uah: ламати нічого не треба, вони
-    # просто чекають своєї дати.
+    # goals_uah — гроші під цілями накопичення. Не в locked_uah: ламати
+    # нічого не треба, вони просто чекають своєї дати.
     goals_uah: float = 0.0
     locked_uah: float = 0.0
     unlock_date: str = ""
@@ -249,30 +259,10 @@ class DebtPlan:
         return min(dated, key=lambda c: c.days_to_due)
 
 
-@dataclass(frozen=True)
-class IdleCash:
-    """Простій: вільні гроші брокера, на які квиток уже є.
-
-    investable_uah — скільки можна вкласти вже; since/days — відколи
-    лежить. Ціна — в окремому IdleCost: сервіс розводить факт про гаманець
-    і пораду про сьогоднішній ринок. Розріз по парах (by_pair) інтеграція
-    не читає: це таблиця для веб-інтерфейсу.
-    """
-
-    investable_uah: float = 0.0
-    since: str = ""
-    days: int = 0
-
-
-@dataclass(frozen=True)
-class IdleCost:
-    """Що коштує простій за сьогоднішньою порадою: на місяць, від дат
-    надходжень, і звідки ставка."""
-
-    cost_month_uah: float = 0.0
-    cost_so_far_uah: float = 0.0
-    rate_pct: float = 0.0
-    rate_label: str = ""
+# IdleCash і IdleCost (простій вільних грошей брокера та його ціна) прибрано
+# в schema 4: простій міряв залишок РАХУНКУ проти квитка, а рахунків
+# застосунок більше не веде. Те, що від простою лишилось осмисленого, —
+# «виплата прийшла, а покупки за нею ще не було», — каже uninvested_uah.
 
 
 @dataclass(frozen=True)
@@ -424,7 +414,6 @@ class StateDoc:
     month_incoming_uah: float
     next_payment: PaymentRow | None = None
     eur_share_pct: float = 0.0
-    account_uah: float = 0.0
     # funds_uah — сертифікати фондів у грн-екв. Необов'язкове: старіший
     # бекенд поля не надсилає, і інтеграція має пережити це нулем, а не
     # падінням.
@@ -463,10 +452,11 @@ class StateDoc:
     # капітал нуль, тож нулем не відрізнити «сервіс сказав 0» від «сервіс
     # старий і поля не надсилає». Саме на цій різниці стоїть capital()
     # нижче.
+    #
+    # З schema 4 — без готівки на рахунках: рахунків документ не знає.
     capital_uah: float | None = None
-    reinvest_min_uah: float = 0.0
-    accounts: dict[str, float] = field(default_factory=dict)
-    reinvest_min: dict[str, float] = field(default_factory=dict)
+    # account_uah, accounts і reinvest_min(_uah) — баланси рахунків і квиток
+    # на папір — прибрано в schema 4 разом із самими рахунками.
     ladder: tuple[LadderRow, ...] = field(default_factory=tuple)
     top_payments: tuple[PaymentRow, ...] = field(default_factory=tuple)
     # v0.2+ сервіса; за старого сервіса 0.1 — порожній
@@ -511,13 +501,6 @@ class StateDoc:
     # capital_delta_30 — рух капіталу за 30 днів. None, доки в сервіса
     # немає знімка місячної давнини або сервіс старший за поле.
     capital_delta_30: CapitalDelta | None = None
-    # idle — простій. None = простою немає (жодна пара брокер × валюта не
-    # дотягує до квитка) або сервіс старший за поле; сенсор тоді unknown,
-    # а не 0: нуль тут означав би «порахували, лежить нічого».
-    idle: IdleCash | None = None
-    # idle_cost — ціна простою. None = простою немає, поради для цих
-    # грошей немає або сервіс старший.
-    idle_cost: IdleCost | None = None
     # debt — борг і картки. None = боргів немає або сервіс старший.
     debt: DebtPlan | None = None
     concentration: tuple[ConcentrationRow, ...] = field(default_factory=tuple)
@@ -573,9 +556,11 @@ class StateDoc:
         """
         if self.capital_uah is not None:
             return self.capital_uah
+        # Доданка «рахунок» тут більше немає (schema 4), і він не загубився:
+        # сервіс із тієї ж версії рахує capital_uah без готівки рахунків, а
+        # запасна сума мусить збігатися з його числом.
         return (
             self.nominal_uah_eq
-            + self.account_uah
             + self.funds_uah
             + self.deposits_uah
             + self.reserve_uah
@@ -680,8 +665,6 @@ class StateDoc:
             _dc(cls, raw),
             currency=str(raw["currency"]),
             next_payment=_dc(PaymentRow, raw.get("next_payment")),
-            accounts=num_map("accounts"),
-            reinvest_min=num_map("reinvest_min"),
             ladder=tuple(_row(LadderRow, r) for r in raw["ladder"]),
             top_payments=tuple(_row(PaymentRow, p) for p in raw["top_payments"]),
             calendar=rows(PaymentRow, "calendar"),
@@ -694,8 +677,6 @@ class StateDoc:
             liquidity=_dc(Liquidity, raw.get("liquidity")),
             reserve=_dc(Reserve, raw.get("reserve")),
             capital_delta_30=_dc(CapitalDelta, raw.get("capital_delta_30")),
-            idle=_dc(IdleCash, raw.get("idle")),
-            idle_cost=_dc(IdleCost, raw.get("idle_cost")),
             debt=_debt(raw.get("debt")),
             concentration=rows(ConcentrationRow, "concentration"),
             market_yield=rows(MarketYieldRow, "market_yield"),

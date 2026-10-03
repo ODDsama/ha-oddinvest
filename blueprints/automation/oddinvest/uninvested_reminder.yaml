@@ -1,8 +1,8 @@
 blueprint:
   name: "ODD Invest: нагадування перевкласти виплати"
   description: >-
-    Сповіщення, коли на рахунку є гроші з виплат, які не
-    перевкладено довше заданого часу.
+    Сповіщення, коли виплати прийшли, а покупки за ними немає довше
+    заданого часу.
   domain: automation
   input:
     uninvested_sensor:
@@ -35,9 +35,9 @@ actions:
     data:
       title: "ODD Invest: час перевкласти"
       message: >-
-        З виплат на рахунку
+        Виплати на
         {{ state_attr(trigger.entity_id, 'uninvested_uah') | round(0) }}
-        {{ state_attr(trigger.entity_id, 'currency') or 'UAH' }} —
-        вони не працюють. Купи щось у Дії.
+        {{ state_attr(trigger.entity_id, 'currency') or 'UAH' }}
+        чекають покупки. Купи щось у Дії.
 
 mode: single

@@ -43,7 +43,6 @@
         "data": {
           "notify_service": "notify-сервіс (напр. telegram або mobile_app_...)",
           "notify_coupon": "Купон/погашення надійшло",
-          "notify_reinvest": "Можна реінвестувати",
           "notify_tomorrow": "Завтра виплата",
           "notify_goal": "Відставання від місячної цілі",
           "notify_actions": "Кнопки дій у сповіщенні (лише mobile_app)",
@@ -75,9 +74,6 @@
       },
       "uninvested_uah": {
         "name": "Не перевкладено"
-      },
-      "account_uah": {
-        "name": "Рахунок"
       },
       "total_capital_uah": {
         "name": "Загальний капітал"
@@ -130,9 +126,6 @@
       "capital_delta_30_uah": {
         "name": "Капітал за 30 днів"
       },
-      "idle_cost_month_uah": {
-        "name": "Простій грошей, на місяць"
-      },
       "debt_total_uah": {
         "name": "Борг під ставкою"
       },
@@ -155,9 +148,6 @@
       },
       "has_uninvested": {
         "name": "Є неперевкладені виплати"
-      },
-      "reinvest_ready": {
-        "name": "Можна реінвестувати"
       },
       "data_stale": {
         "name": "Дані застаріли"

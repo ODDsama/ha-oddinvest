@@ -43,7 +43,6 @@
         "data": {
           "notify_service": "notify service (e.g. telegram or mobile_app_...)",
           "notify_coupon": "Coupon/redemption received",
-          "notify_reinvest": "Reinvest ready",
           "notify_tomorrow": "Payment tomorrow",
           "notify_goal": "Behind monthly goal",
           "notify_actions": "Action buttons in notifications (mobile_app only)",
@@ -75,9 +74,6 @@
       },
       "uninvested_uah": {
         "name": "Uninvested"
-      },
-      "account_uah": {
-        "name": "Cash account"
       },
       "total_capital_uah": {
         "name": "Total capital"
@@ -130,9 +126,6 @@
       "capital_delta_30_uah": {
         "name": "Capital, 30-day change"
       },
-      "idle_cost_month_uah": {
-        "name": "Idle cash cost, per month"
-      },
       "debt_total_uah": {
         "name": "Interest-bearing debt"
       },
@@ -155,9 +148,6 @@
       },
       "has_uninvested": {
         "name": "Uninvested payouts present"
-      },
-      "reinvest_ready": {
-        "name": "Reinvest ready"
       },
       "data_stale": {
         "name": "Data is stale"

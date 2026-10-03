@@ -94,15 +94,6 @@ def _card_mark_stale_attrs(st: StateDoc) -> dict[str, Any] | None:
 # ---------------------------------------------------------------- гроші
 
 
-def _reinvest_ready_attrs(st: StateDoc) -> dict[str, Any]:
-    n = int(st.account_uah // st.reinvest_min_uah) if st.reinvest_min_uah > 0 else 0
-    return {
-        "account_uah": st.account_uah,
-        "reinvest_min_uah": st.reinvest_min_uah,
-        "affordable_count": n,
-    }
-
-
 def _reserve_ready_attrs(st: StateDoc) -> dict[str, Any] | None:
     r = st.reserve
     if r is None:
@@ -159,13 +150,9 @@ BINARY_SENSORS: tuple[OddInvestBinaryDescription, ...] = (
         is_on_fn=lambda st: st.uninvested_uah > 0,
         attrs_fn=lambda st: {"uninvested_uah": st.uninvested_uah, "currency": st.currency},
     ),
-    # ON = на рахунку вистачає щонайменше на один папір (заклик до реінвестиції).
-    OddInvestBinaryDescription(
-        key="reinvest_ready",
-        translation_key="reinvest_ready",
-        is_on_fn=lambda st: st.reinvest_min_uah > 0 and st.account_uah >= st.reinvest_min_uah,
-        attrs_fn=_reinvest_ready_attrs,
-    ),
+    # reinvest_ready («на рахунку вистачає на папір») прибрано в schema 4:
+    # рахунків застосунок більше не веде, тож і порівнювати нічого. Заклик
+    # «виплата чекає на покупку» лишився — це has_uninvested вище.
     # ON = числа на екрані старіші, ніж мають бути.
     #
     # Дві різні відмови під однією сутністю, і це навмисно. Перша: сервіс
