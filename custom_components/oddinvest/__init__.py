@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 import aiohttp
+import voluptuous as vol
 from homeassistant.components import mqtt
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
@@ -13,9 +14,12 @@ from homeassistant.exceptions import (
     HomeAssistantError,
     ServiceValidationError,
 )
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import (
@@ -28,7 +32,7 @@ from .const import (
     SERVICE_REFRESH,
 )
 from .actions import parse_received, pick_targets, rest_headers
-from .alerts import NotificationManager
+from .alerts import STORE_VERSION, NotificationManager
 from .models import ContractError, SchemaMismatch, StateDoc
 
 _LOGGER = logging.getLogger(__name__)
@@ -79,6 +83,11 @@ class OddInvestData(DataUpdateCoordinator[StateDoc | None]):
         # available — LWT сервіса («online»/«offline»), окремо від того, чи
         # документ уже приходив.
         self.available = False
+        # incompatible — останній документ був чужої версії контракту. Тоді
+        # сутності НЕДОСТУПНІ, а не застиглі на останньому значенні: число
+        # тижневої давнини, показане як сьогоднішнє, гірше за його
+        # відсутність. Причину каже запис у «Ремонтах».
+        self.incompatible = False
 
     @property
     def state(self) -> StateDoc | None:
@@ -101,6 +110,20 @@ class OddInvestData(DataUpdateCoordinator[StateDoc | None]):
         """
         s = self.state.settings if self.state else None
         return (s.public_url if s and s.public_url else "") or self.base_url
+
+
+@callback
+def _note_app_version(hass: HomeAssistant, entry: ConfigEntry, version: str) -> None:
+    """Версія сервіса → sw_version пристрою.
+
+    Через реєстр, а не через DeviceInfo сутності: той читається один раз,
+    при її створенні, а версія міняється кожним деплоєм сервіса."""
+    if not version:
+        return
+    reg = dr.async_get(hass)
+    device = reg.async_get_device(identifiers={(DOMAIN, entry.entry_id)})
+    if device is not None and device.sw_version != version:
+        reg.async_update_device(device.id, sw_version=version)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: OddInvestConfigEntry) -> bool:
@@ -136,11 +159,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: OddInvestConfigEntry) ->
                 translation_placeholders={"got": str(err.got), "want": str(err.want)},
             )
             _LOGGER.error("Повідомлення %s не відповідає контракту: %s", msg.topic, err)
+            data.incompatible = True
+            data.async_update_listeners()
             return
         except ContractError as err:
             _LOGGER.error("Повідомлення %s не відповідає контракту: %s", msg.topic, err)
             return
         ir.async_delete_issue(hass, DOMAIN, issue_id)
+        data.incompatible = False
+        _note_app_version(hass, entry, doc.app_version)
         data.async_set_updated_data(doc)
 
     @callback
@@ -182,6 +209,14 @@ async def _options_updated(hass: HomeAssistant, entry: OddInvestConfigEntry) -> 
 async def async_unload_entry(hass: HomeAssistant, entry: OddInvestConfigEntry) -> bool:
     # Підписки MQTT і слухачі сповіщень знімає сам HA (entry.async_on_unload).
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: OddInvestConfigEntry) -> None:
+    """Запис видалено — прибрати його файл сповіщень із .storage.
+
+    Доти файл oddinvest_notify_<entry_id> лишався назавжди: HA прибирає
+    сутності й пристрої видаленого запису, але про чуже сховище не знає."""
+    await Store(hass, STORE_VERSION, f"{DOMAIN}_notify_{entry.entry_id}").async_remove()
 
 
 async def _request(
@@ -257,6 +292,17 @@ def _targets(hass: HomeAssistant, wanted: str) -> list[OddInvestConfigEntry]:
     return [loaded[i] for i in ids]
 
 
+_REFRESH_SCHEMA = vol.Schema({vol.Optional("config_entry_id"): cv.string})
+_MARK_PAYMENT_SCHEMA = vol.Schema(
+    {
+        vol.Optional("config_entry_id"): cv.string,
+        vol.Required("isin"): cv.string,
+        vol.Required("pay_date"): cv.date,
+        vol.Required("status"): vol.In(["received", "none"]),
+    }
+)
+
+
 def _register_services(hass: HomeAssistant) -> None:
     if hass.services.has_service(DOMAIN, SERVICE_REFRESH):
         return
@@ -283,8 +329,13 @@ def _register_services(hass: HomeAssistant) -> None:
         for entry in _targets(hass, str(call.data.get("config_entry_id", ""))):
             await _mark_payment(hass, entry.runtime_data, body)
 
-    hass.services.async_register(DOMAIN, SERVICE_REFRESH, handle_refresh)
-    hass.services.async_register(DOMAIN, SERVICE_MARK_PAYMENT, handle_mark_payment)
+    # Зі схемами: services.yaml описує лише форму в UI й нічого не
+    # перевіряє, тож виклик із YAML без isin доти падав KeyError-ом у
+    # журнал замість зрозумілої відмови біля самого виклику.
+    hass.services.async_register(DOMAIN, SERVICE_REFRESH, handle_refresh, schema=_REFRESH_SCHEMA)
+    hass.services.async_register(
+        DOMAIN, SERVICE_MARK_PAYMENT, handle_mark_payment, schema=_MARK_PAYMENT_SCHEMA
+    )
 
     async def handle_notification_action(event: Event) -> None:
         """Кнопка в сповіщенні mobile_app — та сама ручка, що mark_payment.

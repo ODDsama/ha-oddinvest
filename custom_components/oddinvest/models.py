@@ -414,6 +414,9 @@ class StateDoc:
     month_incoming_uah: float
     next_payment: PaymentRow | None = None
     eur_share_pct: float = 0.0
+    # app_version — збірка сервіса (коротке sha): sw_version пристрою й
+    # рядок діагностики. Необовʼязкове: старший сервіс його не шле.
+    app_version: str = ""
     # funds_uah — сертифікати фондів у грн-екв. Необов'язкове: старіший
     # бекенд поля не надсилає, і інтеграція має пережити це нулем, а не
     # падінням.
@@ -634,8 +637,21 @@ class StateDoc:
         # дата-класу без типового значення плюс raw[...] у _build, і
         # відсутнє дає ContractError із назвою поля нижче. Перелік поруч
         # уже раз розійшовся зі схемою (у ньому бракувало calendar).
+        #
+        # ДІАПАЗОН, а не рівність. Сервіс каже двома числами, що він шле
+        # (schema) і яку найстаршу версію читача це ще не ламає
+        # (schema_min); ми читаємо, якщо наша версія між ними. Доти була
+        # рівність, а сервіс викладається одним пушем — тож кожен його
+        # інкремент клав усі сенсори до ручного оновлення в HACS, навіть
+        # коли зміна наших полів не зачіпала. Сервіс без schema_min
+        # (старший) читається як раніше: schema_min = schema.
         schema = raw.get("schema")
-        if schema != SUPPORTED_SCHEMA:
+        schema_min = raw.get("schema_min", schema)
+        if not (
+            isinstance(schema, int)
+            and isinstance(schema_min, int)
+            and schema_min <= SUPPORTED_SCHEMA <= schema
+        ):
             raise SchemaMismatch(schema, SUPPORTED_SCHEMA)
 
         # Будь-яке поле не того вигляду (рядок замість числа, null замість

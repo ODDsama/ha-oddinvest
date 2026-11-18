@@ -29,8 +29,11 @@ class OddInvestEntity(CoordinatorEntity):
             # тунелю, дійде сюди після перезавантаження запису — а от
             # посилання у сповіщеннях (alerts._open) беруть її щоразу.
             configuration_url=data.open_url,
+            # Версія сервіса, якщо документ уже приходив; далі її оновлює
+            # __init__._note_app_version на кожному новому документі.
+            sw_version=(data.state.app_version or None) if data.state else None,
         )
 
     @property
     def available(self) -> bool:
-        return self._data.available and self._data.state is not None
+        return self._data.available and not self._data.incompatible and self._data.state is not None

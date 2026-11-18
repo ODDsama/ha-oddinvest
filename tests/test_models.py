@@ -472,10 +472,15 @@ def test_wrong_schema_rejected():
     мусить бути відкинута, а не розібрана як нова — її капітал рахує
     готівку рахунків, якої в schema 4 немає, і графік капіталу стрибнув би
     на суму рахунку туди й назад.
+
+    schema_min прибрано: так шле сервіс, старший за діапазон версій, і тоді
+    межа читається як сама schema — тобто лишається рівність, як і доти.
+    Що робить діапазон, перевіряють test_schema_range_* нижче.
     """
     for bad in (3, 5):
         raw = json.loads(load("basic.json"))
         raw["schema"] = bad
+        raw.pop("schema_min", None)
         with pytest.raises(ContractError, match=f"schema={bad}"):
             StateDoc.from_payload(json.dumps(raw))
 
@@ -687,7 +692,7 @@ def test_schema_mismatch_carries_versions_for_repairs():
     """Несумісна версія — окремий тип із версіями: з нього __init__ робить
     запис у «Ремонтах», а не лише рядок у журналі."""
     raw = json.loads(load("basic.json"))
-    raw["schema"] = models.SUPPORTED_SCHEMA + 1
+    raw["schema"] = raw["schema_min"] = models.SUPPORTED_SCHEMA + 1
     with pytest.raises(models.SchemaMismatch) as exc:
         StateDoc.from_payload(json.dumps(raw))
     assert exc.value.got == models.SUPPORTED_SCHEMA + 1
@@ -711,3 +716,38 @@ def test_malformed_field_is_contract_error():
     for bad in cases:
         with pytest.raises(ContractError, match="поле не того вигляду"):
             StateDoc.from_payload(json.dumps(bad))
+
+
+def test_schema_range_accepts_newer_service_that_still_supports_us():
+    """Сервіс пішов уперед (schema більша), але каже, що читач нашої версії
+    його ще читає (schema_min) — документ приймається без релізу інтеграції."""
+    raw = json.loads(load("basic.json"))
+    raw["schema"] = models.SUPPORTED_SCHEMA + 2
+    raw["schema_min"] = models.SUPPORTED_SCHEMA
+    assert StateDoc.from_payload(json.dumps(raw)).generated_at
+
+
+def test_schema_range_rejects_when_service_dropped_us():
+    raw = json.loads(load("basic.json"))
+    raw["schema"] = models.SUPPORTED_SCHEMA + 2
+    raw["schema_min"] = models.SUPPORTED_SCHEMA + 1
+    with pytest.raises(models.SchemaMismatch):
+        StateDoc.from_payload(json.dumps(raw))
+
+
+def test_schema_range_rejects_older_service():
+    """Сервіс старший за інтеграцію: полів, на які ми спираємось, у нього
+    може не бути, і schema_min цього не лікує."""
+    raw = json.loads(load("basic.json"))
+    raw["schema"] = models.SUPPORTED_SCHEMA - 1
+    raw["schema_min"] = 1
+    with pytest.raises(models.SchemaMismatch):
+        StateDoc.from_payload(json.dumps(raw))
+
+
+def test_app_version_is_optional():
+    raw = json.loads(load("basic.json"))
+    raw.pop("app_version", None)
+    assert StateDoc.from_payload(json.dumps(raw)).app_version == ""
+    raw["app_version"] = "9ce65d0"
+    assert StateDoc.from_payload(json.dumps(raw)).app_version == "9ce65d0"
